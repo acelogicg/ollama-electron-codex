@@ -16,6 +16,7 @@ export default function App() {
   const [mode, setMode] = useState(localStorage.getItem('chat-mode') || 'ask');
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubRepoName, setGithubRepoName] = useState(localStorage.getItem('github-repo') || '');
+  const [workspaceRepo, setWorkspaceRepo] = useState(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -46,15 +47,23 @@ export default function App() {
   const loadGitHubRepos = async () => {
     setLoadingRepos(true);
     try {
-      const repos = await window.github.listRepos();
+      const [repos, workspace] = await Promise.all([
+        window.github.listRepos(),
+        window.github.getWorkspaceRepo()
+      ]);
       setGithubRepos(repos);
+      setWorkspaceRepo(workspace);
       setGithubRepoName((current) => {
         if (!repos.length) return '';
+        if (workspace?.nameWithOwner && repos.some((repo) => repo.nameWithOwner === workspace.nameWithOwner)) {
+          return workspace.nameWithOwner;
+        }
         return repos.some((repo) => repo.nameWithOwner === current) ? current : repos[0].nameWithOwner;
       });
     } catch (_error) {
       setGithubRepos([]);
       setGithubRepoName('');
+      setWorkspaceRepo(null);
     } finally {
       setLoadingRepos(false);
     }
@@ -136,7 +145,7 @@ export default function App() {
     const userMessage = { role: 'user', content };
     const chatHistory = [...messages.filter((message) => !message.streaming), userMessage]
       .map(({ role, content: text }) => ({ role, content: text }));
-    const history = [buildSystemContext(mode, selectedRepo), ...chatHistory];
+    const history = [buildSystemContext(mode, selectedRepo, workspaceRepo), ...chatHistory];
 
     setInput('');
     setGenerating(true);

@@ -25,7 +25,7 @@ export const chatModes = [
   }
 ];
 
-export function buildSystemContext(modeId, githubRepo) {
+export function buildSystemContext(modeId, githubRepo, workspaceRepo) {
   const mode = chatModes.find((item) => item.id === modeId) || chatModes[0];
   const lines = [
     `Mode: ${mode.title}.`,
@@ -36,6 +36,15 @@ export function buildSystemContext(modeId, githubRepo) {
     lines.push(`GitHub repository context: ${githubRepo.nameWithOwner}.`);
     if (githubRepo.url) lines.push(`Repository URL: ${githubRepo.url}.`);
     if (githubRepo.description) lines.push(`Repository description: ${githubRepo.description}.`);
+  }
+
+  if (workspaceRepo?.root) {
+    lines.push(`Local git workspace: ${workspaceRepo.root}.`);
+    if (workspaceRepo.branch) lines.push(`Current branch: ${workspaceRepo.branch}.`);
+    if (workspaceRepo.remote) lines.push(`Git remote: ${workspaceRepo.remote}.`);
+    if (workspaceRepo.status) lines.push(`Git status:\n${workspaceRepo.status}`);
+    else lines.push('Git status: clean.');
+    if (workspaceRepo.commits) lines.push(`Recent commits:\n${workspaceRepo.commits}`);
   }
 
   return { role: 'system', content: lines.join('\n') };

@@ -76,7 +76,42 @@ function parseRemoteRepo(remote) {
   };
 }
 
+async function execGit(args, cwd = process.cwd()) {
+  const { stdout } = await execFileAsync('git', args, { cwd, windowsHide: true });
+  return stdout.trim();
+}
+
+async function getWorkspaceRepo() {
+  try {
+    const root = await execGit(['rev-parse', '--show-toplevel']);
+    const [branch, remote, status, commits] = await Promise.all([
+      execGit(['branch', '--show-current'], root).catch(() => ''),
+      execGit(['remote', 'get-url', 'origin'], root).catch(() => ''),
+      execGit(['status', '--short'], root).catch(() => ''),
+      execGit(['log', '-5', '--pretty=format:%h %s'], root).catch(() => '')
+    ]);
+    const repo = parseRemoteRepo(remote);
+
+    return {
+      root,
+      branch,
+      remote,
+      status,
+      commits,
+      nameWithOwner: repo?.nameWithOwner || path.basename(root),
+      url: repo?.url || '',
+      description: repo?.description || 'Current workspace',
+      isPrivate: repo?.isPrivate || false,
+      source: repo ? 'git' : 'local'
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
 async function listGitHubRepos() {
+  const workspaceRepo = await getWorkspaceRepo();
+
   try {
     const { stdout } = await execFileAsync('gh', [
       'repo',
@@ -87,15 +122,15 @@ async function listGitHubRepos() {
       'nameWithOwner,url,description,isPrivate'
     ], { windowsHide: true });
 
-    return JSON.parse(stdout).map((repo) => ({ ...repo, source: 'gh' }));
+    const repos = JSON.parse(stdout).map((repo) => ({ ...repo, source: 'gh' }));
+    if (!workspaceRepo) return repos;
+
+    const exists = repos.some((repo) => repo.nameWithOwner === workspaceRepo.nameWithOwner);
+    return exists
+      ? repos.map((repo) => repo.nameWithOwner === workspaceRepo.nameWithOwner ? { ...repo, ...workspaceRepo, source: 'git+gh' } : repo)
+      : [workspaceRepo, ...repos];
   } catch (_error) {
-    try {
-      const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { windowsHide: true });
-      const repo = parseRemoteRepo(stdout);
-      return repo ? [repo] : [];
-    } catch (_fallbackError) {
-      return [];
-    }
+    return workspaceRepo ? [workspaceRepo] : [];
   }
 }
 
@@ -106,6 +141,7 @@ ipcMain.handle('ollama:list-models', async () => {
 });
 
 ipcMain.handle('github:list-repos', async () => listGitHubRepos());
+ipcMain.handle('github:get-workspace-repo', async () => getWorkspaceRepo());
 
 ipcMain.handle('ollama:preload-model', async (_event, model) => {
   if (!model) throw new Error('Model belum dipilih.');

@@ -23,5 +23,6 @@ contextBridge.exposeInMainWorld('ollama', {
 });
 
 contextBridge.exposeInMainWorld('github', {
-  listRepos: () => ipcRenderer.invoke('github:list-repos')
+  listRepos: () => ipcRenderer.invoke('github:list-repos'),
+  getWorkspaceRepo: () => ipcRenderer.invoke('github:get-workspace-repo')
 });
