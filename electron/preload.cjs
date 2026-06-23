@@ -23,16 +23,17 @@ contextBridge.exposeInMainWorld('ollama', {
 });
 
 contextBridge.exposeInMainWorld('github', {
-  listRepos: () => ipcRenderer.invoke('github:list-repos'),
-  getWorkspaceRepo: () => ipcRenderer.invoke('github:get-workspace-repo')
+  listRepos: (cwd) => ipcRenderer.invoke('github:list-repos', cwd),
+  getWorkspaceRepo: (cwd) => ipcRenderer.invoke('github:get-workspace-repo', cwd)
 });
 
 contextBridge.exposeInMainWorld('workspace', {
-  getContext: () => ipcRenderer.invoke('workspace:get-context')
+  getContext: (cwd) => ipcRenderer.invoke('workspace:get-context', cwd),
+  chooseDirectory: () => ipcRenderer.invoke('workspace:choose-directory')
 });
 
 contextBridge.exposeInMainWorld('git', {
-  status: () => ipcRenderer.invoke('git:status'),
-  diff: () => ipcRenderer.invoke('git:diff'),
-  log: () => ipcRenderer.invoke('git:log')
+  status: (cwd) => ipcRenderer.invoke('git:status', cwd),
+  diff: (cwd) => ipcRenderer.invoke('git:diff', cwd),
+  log: (cwd) => ipcRenderer.invoke('git:log', cwd)
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
@@ -111,9 +111,9 @@ function keepWithinRoot(root, filePath) {
   return resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`);
 }
 
-async function getWorkspaceRepo() {
+async function getWorkspaceRepo(cwd = process.cwd()) {
   try {
-    const root = await execGit(['rev-parse', '--show-toplevel']);
+    const root = await execGit(['rev-parse', '--show-toplevel'], cwd);
     const [branch, remote, status, commits] = await Promise.all([
       execGit(['branch', '--show-current'], root).catch(() => ''),
       execGit(['remote', 'get-url', 'origin'], root).catch(() => ''),
@@ -139,8 +139,8 @@ async function getWorkspaceRepo() {
   }
 }
 
-async function getWorkspaceContext() {
-  const repo = await getWorkspaceRepo();
+async function getWorkspaceContext(cwd = process.cwd()) {
+  const repo = await getWorkspaceRepo(cwd);
   if (!repo?.root) return null;
 
   try {
@@ -188,8 +188,8 @@ async function getWorkspaceContext() {
   }
 }
 
-async function listGitHubRepos() {
-  const workspaceRepo = await getWorkspaceRepo();
+async function listGitHubRepos(cwd = process.cwd()) {
+  const workspaceRepo = await getWorkspaceRepo(cwd);
 
   try {
     const { stdout } = await execFileAsync('gh', [
@@ -219,19 +219,28 @@ ipcMain.handle('ollama:list-models', async () => {
   return data.models || [];
 });
 
-ipcMain.handle('github:list-repos', async () => listGitHubRepos());
-ipcMain.handle('github:get-workspace-repo', async () => getWorkspaceRepo());
-ipcMain.handle('workspace:get-context', async () => getWorkspaceContext());
-ipcMain.handle('git:status', async () => {
-  const repo = await getWorkspaceRepo();
+ipcMain.handle('github:list-repos', async (_event, cwd) => listGitHubRepos(cwd || process.cwd()));
+ipcMain.handle('github:get-workspace-repo', async (_event, cwd) => getWorkspaceRepo(cwd || process.cwd()));
+ipcMain.handle('workspace:get-context', async (_event, cwd) => getWorkspaceContext(cwd || process.cwd()));
+ipcMain.handle('workspace:choose-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Pilih direktori repo'
+  });
+
+  if (result.canceled || !result.filePaths.length) return null;
+  return getWorkspaceContext(result.filePaths[0]);
+});
+ipcMain.handle('git:status', async (_event, cwd) => {
+  const repo = await getWorkspaceRepo(cwd || process.cwd());
   return repo?.root ? execGit(['status', '--short'], repo.root) : '';
 });
-ipcMain.handle('git:diff', async () => {
-  const repo = await getWorkspaceRepo();
+ipcMain.handle('git:diff', async (_event, cwd) => {
+  const repo = await getWorkspaceRepo(cwd || process.cwd());
   return repo?.root ? execGit(['diff'], repo.root) : '';
 });
-ipcMain.handle('git:log', async () => {
-  const repo = await getWorkspaceRepo();
+ipcMain.handle('git:log', async (_event, cwd) => {
+  const repo = await getWorkspaceRepo(cwd || process.cwd());
   return repo?.root ? execGit(['log', '-20', '--pretty=format:%h %s'], repo.root) : '';
 });
 

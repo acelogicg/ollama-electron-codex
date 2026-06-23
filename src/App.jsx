@@ -20,6 +20,7 @@ export default function App() {
   const [autoCompactContext, setAutoCompactContext] = useState(localStorage.getItem('auto-compact-context') !== 'false');
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubRepoName, setGithubRepoName] = useState(localStorage.getItem('github-repo') || '');
+  const [workspaceDir, setWorkspaceDir] = useState(localStorage.getItem('workspace-dir') || '');
   const [workspaceRepo, setWorkspaceRepo] = useState(null);
   const [workspaceContext, setWorkspaceContext] = useState(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
@@ -49,17 +50,18 @@ export default function App() {
     }
   };
 
-  const loadGitHubRepos = async () => {
+  const loadGitHubRepos = async (targetDir = workspaceDir) => {
     setLoadingRepos(true);
     try {
       const [repos, workspace, context] = await Promise.all([
-        window.github.listRepos(),
-        window.github.getWorkspaceRepo(),
-        window.workspace.getContext()
+        window.github.listRepos(targetDir),
+        window.github.getWorkspaceRepo(targetDir),
+        window.workspace.getContext(targetDir)
       ]);
       setGithubRepos(repos);
       setWorkspaceRepo(workspace);
       setWorkspaceContext(context);
+      if (workspace?.root) setWorkspaceDir(workspace.root);
       setGithubRepoName((current) => {
         if (!repos.length) return '';
         if (workspace?.nameWithOwner && repos.some((repo) => repo.nameWithOwner === workspace.nameWithOwner)) {
@@ -96,6 +98,11 @@ export default function App() {
     if (githubRepoName) localStorage.setItem('github-repo', githubRepoName);
     else localStorage.removeItem('github-repo');
   }, [githubRepoName]);
+
+  useEffect(() => {
+    if (workspaceDir) localStorage.setItem('workspace-dir', workspaceDir);
+    else localStorage.removeItem('workspace-dir');
+  }, [workspaceDir]);
 
   useEffect(() => {
     if (!model) return;
@@ -194,6 +201,23 @@ export default function App() {
     setStatus(model ? 'Siap' : status);
   };
 
+  const chooseWorkspaceDirectory = async () => {
+    setLoadingRepos(true);
+    try {
+      const context = await window.workspace.chooseDirectory();
+      if (!context?.repo?.root) return;
+
+      const repos = await window.github.listRepos(context.repo.root);
+      setWorkspaceContext(context);
+      setWorkspaceRepo(context.repo);
+      setWorkspaceDir(context.repo.root);
+      setGithubRepos(repos.length ? repos : [context.repo]);
+      setGithubRepoName(context.repo.nameWithOwner);
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
   const onKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -221,6 +245,7 @@ export default function App() {
           onModelChange={setModel}
           onModeChange={setMode}
           onRepoChange={setGithubRepoName}
+          onChooseWorkspace={chooseWorkspaceDirectory}
           onReloadRepos={loadGitHubRepos}
           onReloadModels={loadModels}
           onNewChat={startNewChat}

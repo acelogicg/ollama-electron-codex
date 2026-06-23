@@ -16,6 +16,7 @@ export default function Topbar({
   onModelChange,
   onModeChange,
   onRepoChange,
+  onChooseWorkspace,
   onReloadRepos,
   onReloadModels,
   onNewChat,
@@ -65,6 +66,9 @@ export default function Topbar({
               <option key={repo.nameWithOwner} value={repo.nameWithOwner}>{repo.nameWithOwner}</option>
             ))}
           </select>
+          <button className="icon-button" onClick={onChooseWorkspace} title="Pilih direktori repo" aria-label="Pilih direktori repo" disabled={loadingRepos || generating}>
+            <Icon name="folder" />
+          </button>
           <button className="icon-button" onClick={onReloadRepos} title="Muat ulang repo" aria-label="Muat ulang repo" disabled={loadingRepos || generating}>
             <Icon name="refresh" />
           </button>
