@@ -66,11 +66,16 @@ function highlightCode(code) {
   });
 }
 
-function MessageContent({ content, streaming, thinkingActive }) {
+function getThinkingPreview(thinking) {
+  return thinking.replace(/\s+/g, ' ').trim().slice(-56);
+}
+
+function MessageContent({ content, streaming, thinking, thinkingActive }) {
   if (!content && thinkingActive) {
     return (
       <span className="thinking-state" title="Thinking" aria-label="Thinking">
-        <Icon name="thinking" />
+        <span className="thinking-label">Thinking</span>
+        {thinking ? <span className="thinking-preview">{getThinkingPreview(thinking)}</span> : null}
         <span className="typing"><b /><b /><b /></span>
       </span>
     );
@@ -257,7 +262,7 @@ export default function App() {
             <article key={index} className={`message-row ${message.role} ${message.thinkingActive ? 'thinking' : ''}`}>
               <div className="bubble">
                 <div className="content">
-                  <MessageContent content={message.content} streaming={message.streaming} thinkingActive={message.thinkingActive} />
+                  <MessageContent content={message.content} streaming={message.streaming} thinking={message.thinking || ''} thinkingActive={message.thinkingActive} />
                 </div>
               </div>
             </article>
