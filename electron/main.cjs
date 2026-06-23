@@ -22,8 +22,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1180,
     height: 780,
-    minWidth: 860,
-    minHeight: 600,
+    minWidth: 720,
+    minHeight: 520,
     backgroundColor: '#07111f',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
@@ -32,6 +32,8 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+
+  win.maximize();
 
   if (app.isPackaged) {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
@@ -70,7 +72,7 @@ ipcMain.handle('ollama:preload-model', async (_event, model) => {
 });
 
 ipcMain.handle('ollama:chat', async (event, payload) => {
-  const { requestId, model, messages, options } = payload;
+  const { requestId, model, messages, options, think } = payload;
   if (!requestId || !model) throw new Error('requestId dan model wajib diisi.');
 
   const controller = new AbortController();
@@ -86,6 +88,7 @@ ipcMain.handle('ollama:chat', async (event, payload) => {
         messages,
         stream: true,
         keep_alive: '30m',
+        think,
         options: options || { temperature: 0.7 }
       })
     });
