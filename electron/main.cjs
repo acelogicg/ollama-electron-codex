@@ -53,6 +53,11 @@ async function ollamaFetch(route, options = {}) {
   return response;
 }
 
+function isThinkingUnsupported(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('think') || message.includes('thinking');
+}
+
 ipcMain.handle('ollama:list-models', async () => {
   const response = await ollamaFetch('/api/tags');
   const data = await response.json();
@@ -77,19 +82,22 @@ ipcMain.handle('ollama:chat', async (event, payload) => {
   const controller = new AbortController();
   activeRequests.set(requestId, controller);
 
-  try {
+  const streamChat = async (thinkValue) => {
+    const body = {
+      model,
+      messages,
+      stream: true,
+      keep_alive: '30m',
+      options: options || { temperature: 0.7 }
+    };
+
+    if (thinkValue !== undefined) body.think = thinkValue;
+
     const response = await ollamaFetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-        keep_alive: '30m',
-        think,
-        options: options || { temperature: 0.7 }
-      })
+      body: JSON.stringify(body)
     });
 
     const reader = response.body.getReader();
@@ -116,6 +124,22 @@ ipcMain.handle('ollama:chat', async (event, payload) => {
     }
 
     event.sender.send('ollama:chat-done', { requestId });
+  };
+
+  try {
+    const autoThink = model.toLowerCase().includes('gpt-oss') ? 'medium' : true;
+    const thinkValue = think === 'auto' ? autoThink : think;
+
+    try {
+      await streamChat(thinkValue);
+    } catch (error) {
+      if (think === 'auto' && error.name !== 'AbortError' && isThinkingUnsupported(error)) {
+        await streamChat(undefined);
+      } else {
+        throw error;
+      }
+    }
+
     return { ok: true };
   } catch (error) {
     if (error.name !== 'AbortError') {

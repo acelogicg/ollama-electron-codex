@@ -122,10 +122,6 @@ export default function App() {
   const bottomRef = useRef(null);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
-  const thinkMode = useMemo(() => {
-    const normalized = model.toLowerCase();
-    return normalized.includes('gpt-oss') ? 'medium' : true;
-  }, [model]);
 
   const loadModels = async () => {
     setLoadingModels(true);
@@ -211,7 +207,7 @@ export default function App() {
     setStatus('Menjawab...');
     setMessages((current) => [...current, userMessage, { role: 'assistant', content: '', streaming: true }]);
 
-    await window.ollama.chat({ requestId: id, model, messages: history, think: thinkMode, options: { temperature: 0.7 } });
+    await window.ollama.chat({ requestId: id, model, messages: history, think: 'auto', options: { temperature: 0.7 } });
   };
 
   const stop = async () => {
