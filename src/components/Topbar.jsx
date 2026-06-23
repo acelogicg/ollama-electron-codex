@@ -70,7 +70,7 @@ export default function Topbar({
         <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">
           <Icon name="refresh" />
         </button>
-        <button className="icon-button" onClick={onNewChat} disabled={generating} title="Percakapan baru" aria-label="Percakapan baru">
+        <button className="icon-button" onClick={onNewChat} title="Percakapan baru" aria-label="Percakapan baru">
           <Icon name="plus" />
         </button>
       </div>

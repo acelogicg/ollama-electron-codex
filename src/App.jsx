@@ -160,8 +160,8 @@ export default function App() {
     await window.ollama.chat({ requestId: id, model, messages: history, think: 'auto', options: { temperature: 0.7 } });
   };
 
-  const stop = async () => {
-    if (!requestId) return;
+  const cancelActiveRequest = async () => {
+    if (!requestId) return false;
     await window.ollama.cancel(requestId);
     setMessages((current) => current.map((message) => (
       message.streaming ? { ...message, streaming: false } : message
@@ -169,6 +169,18 @@ export default function App() {
     setGenerating(false);
     setRequestId(null);
     setStatus('Dihentikan');
+    return true;
+  };
+
+  const stop = async () => {
+    await cancelActiveRequest();
+  };
+
+  const startNewChat = async () => {
+    await cancelActiveRequest();
+    setMessages(initialMessages);
+    setInput('');
+    setStatus(model ? 'Siap' : status);
   };
 
   const onKeyDown = (event) => {
@@ -199,7 +211,7 @@ export default function App() {
           onRepoChange={setGithubRepoName}
           onReloadRepos={loadGitHubRepos}
           onReloadModels={loadModels}
-          onNewChat={() => setMessages(initialMessages)}
+          onNewChat={startNewChat}
         />
         <MessageList messages={messages} bottomRef={bottomRef} />
         <Composer
