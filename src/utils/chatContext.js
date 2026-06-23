@@ -25,6 +25,30 @@ export const chatModes = [
   }
 ];
 
+export function buildChatHistory(messages, userMessage, { memoryEnabled, autoCompactContext }) {
+  if (!memoryEnabled) return [userMessage];
+
+  const previous = messages.filter((message) => !message.streaming);
+  const history = [...previous, userMessage].map(({ role, content }) => ({ role, content }));
+
+  if (!autoCompactContext || history.length <= 12) return history;
+
+  const recent = history.slice(-10);
+  const older = history.slice(0, -10);
+  const compacted = older
+    .map((message) => `${message.role}: ${message.content.replace(/\s+/g, ' ').trim()}`)
+    .join('\n')
+    .slice(-4000);
+
+  return [
+    {
+      role: 'system',
+      content: `Compacted previous conversation:\n${compacted}`
+    },
+    ...recent
+  ];
+}
+
 function appendWorkspaceContext(lines, workspaceContext) {
   if (!workspaceContext) return;
 

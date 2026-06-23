@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Composer from './components/Composer.jsx';
 import MessageList from './components/MessageList.jsx';
+import SettingsPage from './components/SettingsPage.jsx';
 import Topbar from './components/Topbar.jsx';
-import { buildSystemContext, chatModes } from './utils/chatContext.js';
+import { buildChatHistory, buildSystemContext, chatModes } from './utils/chatContext.js';
 import WebGLBackground from './WebGLBackground.jsx';
 
 const initialMessages = [];
@@ -13,7 +14,10 @@ export default function App() {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('Menghubungkan...');
+  const [view, setView] = useState('chat');
   const [mode, setMode] = useState(localStorage.getItem('chat-mode') || 'ask');
+  const [memoryEnabled, setMemoryEnabled] = useState(localStorage.getItem('memory-enabled') !== 'false');
+  const [autoCompactContext, setAutoCompactContext] = useState(localStorage.getItem('auto-compact-context') !== 'false');
   const [githubRepos, setGithubRepos] = useState([]);
   const [githubRepoName, setGithubRepoName] = useState(localStorage.getItem('github-repo') || '');
   const [workspaceRepo, setWorkspaceRepo] = useState(null);
@@ -79,6 +83,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('chat-mode', mode);
   }, [mode]);
+
+  useEffect(() => {
+    localStorage.setItem('memory-enabled', String(memoryEnabled));
+  }, [memoryEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('auto-compact-context', String(autoCompactContext));
+  }, [autoCompactContext]);
 
   useEffect(() => {
     if (githubRepoName) localStorage.setItem('github-repo', githubRepoName);
@@ -147,8 +159,7 @@ export default function App() {
 
     const id = crypto.randomUUID();
     const userMessage = { role: 'user', content };
-    const chatHistory = [...messages.filter((message) => !message.streaming), userMessage]
-      .map(({ role, content: text }) => ({ role, content: text }));
+    const chatHistory = buildChatHistory(messages, userMessage, { memoryEnabled, autoCompactContext });
     const history = [buildSystemContext(mode, selectedRepo, workspaceRepo, workspaceContext), ...chatHistory];
 
     setInput('');
@@ -199,6 +210,7 @@ export default function App() {
           models={models}
           selected={selected}
           status={status}
+          view={view}
           mode={mode}
           modes={chatModes}
           githubRepos={githubRepos}
@@ -212,17 +224,32 @@ export default function App() {
           onReloadRepos={loadGitHubRepos}
           onReloadModels={loadModels}
           onNewChat={startNewChat}
+          onOpenSettings={() => setView('settings')}
+          onBackToChat={() => setView('chat')}
         />
-        <MessageList messages={messages} bottomRef={bottomRef} />
-        <Composer
-          input={input}
-          model={model}
-          generating={generating}
-          onInputChange={setInput}
-          onKeyDown={onKeyDown}
-          onSend={send}
-          onStop={stop}
-        />
+        {view === 'settings'
+          ? (
+            <SettingsPage
+              memoryEnabled={memoryEnabled}
+              autoCompactContext={autoCompactContext}
+              onMemoryChange={setMemoryEnabled}
+              onAutoCompactChange={setAutoCompactContext}
+            />
+          )
+          : (
+            <>
+              <MessageList messages={messages} bottomRef={bottomRef} />
+              <Composer
+                input={input}
+                model={model}
+                generating={generating}
+                onInputChange={setInput}
+                onKeyDown={onKeyDown}
+                onSend={send}
+                onStop={stop}
+              />
+            </>
+          )}
       </main>
     </div>
   );

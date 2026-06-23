@@ -303,6 +303,79 @@ textarea::placeholder { color: #6d7480; }
 .send:disabled { opacity: .3; cursor: default; }
 .send.stop { background: #a95252; color: white; }
 
+.settings-page {
+  overflow-y: auto;
+  padding: 18px clamp(12px, 2vw, 28px);
+}
+
+.settings-panel {
+  width: min(560px, 100%);
+  margin: 0 auto;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 8px;
+  background: rgba(24, 28, 36, .82);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.settings-row:last-child { border-bottom: 0; }
+.settings-row h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.settings-row p {
+  margin: 0;
+  color: #89929f;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+}
+.toggle input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.toggle span {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  background: #151922;
+}
+.toggle span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #7f8794;
+  transition: transform .16s ease, background .16s ease;
+}
+.toggle input:checked + span {
+  border-color: rgba(140, 199, 255, .34);
+  background: rgba(140, 199, 255, .14);
+}
+.toggle input:checked + span::after {
+  transform: translateX(16px);
+  background: #8cc7ff;
+}
+
 @media (max-width: 620px) {
   select { width: 145px; }
   .repo-picker { display: none; }
