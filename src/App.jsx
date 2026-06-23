@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Composer from './components/Composer.jsx';
 import MessageList from './components/MessageList.jsx';
 import Topbar from './components/Topbar.jsx';
+import { buildSystemContext, chatModes } from './utils/chatContext.js';
 import WebGLBackground from './WebGLBackground.jsx';
 
 const initialMessages = [];
@@ -12,12 +13,19 @@ export default function App() {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('Menghubungkan...');
+  const [mode, setMode] = useState(localStorage.getItem('chat-mode') || 'ask');
+  const [githubRepos, setGithubRepos] = useState([]);
+  const [githubRepoName, setGithubRepoName] = useState(localStorage.getItem('github-repo') || '');
+  const [loadingRepos, setLoadingRepos] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [requestId, setRequestId] = useState(null);
   const bottomRef = useRef(null);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
+  const selectedRepo = useMemo(() => (
+    githubRepos.find((repo) => repo.nameWithOwner === githubRepoName) || null
+  ), [githubRepos, githubRepoName]);
 
   const loadModels = async () => {
     setLoadingModels(true);
@@ -35,7 +43,34 @@ export default function App() {
     }
   };
 
+  const loadGitHubRepos = async () => {
+    setLoadingRepos(true);
+    try {
+      const repos = await window.github.listRepos();
+      setGithubRepos(repos);
+      setGithubRepoName((current) => {
+        if (!repos.length) return '';
+        return repos.some((repo) => repo.nameWithOwner === current) ? current : repos[0].nameWithOwner;
+      });
+    } catch (_error) {
+      setGithubRepos([]);
+      setGithubRepoName('');
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
   useEffect(() => { loadModels(); }, []);
+  useEffect(() => { loadGitHubRepos(); }, []);
+
+  useEffect(() => {
+    localStorage.setItem('chat-mode', mode);
+  }, [mode]);
+
+  useEffect(() => {
+    if (githubRepoName) localStorage.setItem('github-repo', githubRepoName);
+    else localStorage.removeItem('github-repo');
+  }, [githubRepoName]);
 
   useEffect(() => {
     if (!model) return;
@@ -99,8 +134,9 @@ export default function App() {
 
     const id = crypto.randomUUID();
     const userMessage = { role: 'user', content };
-    const history = [...messages.filter((message) => !message.streaming), userMessage]
+    const chatHistory = [...messages.filter((message) => !message.streaming), userMessage]
       .map(({ role, content: text }) => ({ role, content: text }));
+    const history = [buildSystemContext(mode, selectedRepo), ...chatHistory];
 
     setInput('');
     setGenerating(true);
@@ -138,9 +174,17 @@ export default function App() {
           models={models}
           selected={selected}
           status={status}
+          mode={mode}
+          modes={chatModes}
+          githubRepos={githubRepos}
+          selectedRepo={selectedRepo}
+          loadingRepos={loadingRepos}
           loadingModels={loadingModels}
           generating={generating}
           onModelChange={setModel}
+          onModeChange={setMode}
+          onRepoChange={setGithubRepoName}
+          onReloadRepos={loadGitHubRepos}
           onReloadModels={loadModels}
           onNewChat={() => setMessages(initialMessages)}
         />

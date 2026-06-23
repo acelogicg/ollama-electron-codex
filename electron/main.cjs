@@ -1,8 +1,11 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { execFile } = require('child_process');
 const path = require('path');
+const { promisify } = require('util');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const activeRequests = new Map();
+const execFileAsync = promisify(execFile);
 
 async function loadDevServer(win, attempts = 20) {
   const url = 'http://127.0.0.1:5173';
@@ -58,11 +61,51 @@ function isThinkingUnsupported(error) {
   return message.includes('think') || message.includes('thinking');
 }
 
+function parseRemoteRepo(remote) {
+  const clean = remote.trim().replace(/\.git$/, '');
+  const sshMatch = clean.match(/github\.com[:/](.+\/.+)$/);
+  if (!sshMatch) return null;
+
+  const nameWithOwner = sshMatch[1];
+  return {
+    nameWithOwner,
+    url: `https://github.com/${nameWithOwner}`,
+    description: 'Current workspace',
+    isPrivate: false,
+    source: 'git'
+  };
+}
+
+async function listGitHubRepos() {
+  try {
+    const { stdout } = await execFileAsync('gh', [
+      'repo',
+      'list',
+      '--limit',
+      '100',
+      '--json',
+      'nameWithOwner,url,description,isPrivate'
+    ], { windowsHide: true });
+
+    return JSON.parse(stdout).map((repo) => ({ ...repo, source: 'gh' }));
+  } catch (_error) {
+    try {
+      const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { windowsHide: true });
+      const repo = parseRemoteRepo(stdout);
+      return repo ? [repo] : [];
+    } catch (_fallbackError) {
+      return [];
+    }
+  }
+}
+
 ipcMain.handle('ollama:list-models', async () => {
   const response = await ollamaFetch('/api/tags');
   const data = await response.json();
   return data.models || [];
 });
+
+ipcMain.handle('github:list-repos', async () => listGitHubRepos());
 
 ipcMain.handle('ollama:preload-model', async (_event, model) => {
   if (!model) throw new Error('Model belum dipilih.');

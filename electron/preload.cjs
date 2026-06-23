@@ -21,3 +21,7 @@ contextBridge.exposeInMainWorld('ollama', {
     return () => ipcRenderer.removeListener('ollama:chat-error', listener);
   }
 });
+
+contextBridge.exposeInMainWorld('github', {
+  listRepos: () => ipcRenderer.invoke('github:list-repos')
+});

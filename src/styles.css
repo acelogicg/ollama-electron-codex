@@ -49,7 +49,7 @@ button { color: inherit; }
   -webkit-app-region: drag;
 }
 
-.title-group, .toolbar { display: flex; align-items: center; }
+.title-group, .toolbar, .mode-switcher, .repo-picker { display: flex; align-items: center; }
 .title-group { gap: 7px; min-width: 0; }
 .app-mark {
   display: grid;
@@ -61,6 +61,17 @@ button { color: inherit; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #a15c5c; }
 .status-dot.online { background: #60b989; }
 .toolbar { gap: 6px; -webkit-app-region: no-drag; }
+.mode-switcher, .repo-picker {
+  gap: 4px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, .06);
+  border-radius: 7px;
+  background: rgba(12, 15, 21, .48);
+}
+.repo-picker {
+  padding-left: 8px;
+  color: #89929f;
+}
 
 .icon {
   width: 16px;
@@ -85,6 +96,12 @@ select {
   outline: none;
   font-size: 11px;
 }
+.repo-select {
+  width: 180px;
+  border: 0;
+  background: transparent;
+  padding-left: 4px;
+}
 
 .icon-button {
   width: 28px;
@@ -98,6 +115,11 @@ select {
   cursor: pointer;
 }
 .icon-button:hover { background: #1b202a; }
+.icon-button.active {
+  color: #8cc7ff;
+  background: rgba(140, 199, 255, .12);
+  border-color: rgba(140, 199, 255, .24);
+}
 .icon-button:disabled { opacity: .4; cursor: default; }
 
 .messages {
@@ -283,6 +305,7 @@ textarea::placeholder { color: #6d7480; }
 
 @media (max-width: 620px) {
   select { width: 145px; }
+  .repo-picker { display: none; }
   .bubble { max-width: 94%; }
   .composer-wrap { padding: 7px 8px 8px; }
 }
