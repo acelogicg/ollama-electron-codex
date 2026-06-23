@@ -74,9 +74,11 @@ function MessageContent({ content, streaming, thinking, thinkingActive }) {
   if (!content && thinkingActive) {
     return (
       <span className="thinking-state" title="Thinking" aria-label="Thinking">
-        <span className="thinking-label">Thinking</span>
+        <span className="thinking-head">
+          <span className="thinking-label">Thinking</span>
+          <span className="typing"><b /><b /><b /></span>
+        </span>
         {thinking ? <span className="thinking-preview">{getThinkingPreview(thinking)}</span> : null}
-        <span className="typing"><b /><b /><b /></span>
       </span>
     );
   }
