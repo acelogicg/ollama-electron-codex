@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import WebGLBackground from './WebGLBackground.jsx';
 
-const initialMessage = { role: 'assistant', content: 'Ollama siap. Pilih model lalu mulai percakapan.' };
+const initialMessages = [];
 const codeBlockPattern = /```([a-zA-Z0-9_+.-]*)\n?([\s\S]*?)```/g;
 const tokenPattern = /(\/\/.*|#.*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b(?:async|await|break|case|catch|class|const|continue|def|else|export|extends|finally|for|from|function|if|import|in|let|new|null|return|throw|try|var|while|true|false)\b|\b\d+(?:\.\d+)?\b)/g;
 
@@ -113,7 +113,7 @@ function MessageContent({ content, streaming, thinkingActive }) {
 export default function App() {
   const [models, setModels] = useState([]);
   const [model, setModel] = useState(localStorage.getItem('ollama-model') || '');
-  const [messages, setMessages] = useState([initialMessage]);
+  const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('Menghubungkan...');
   const [loadingModels, setLoadingModels] = useState(false);
@@ -202,7 +202,7 @@ export default function App() {
 
     const id = crypto.randomUUID();
     const userMessage = { role: 'user', content };
-    const history = [...messages.filter((m) => m !== initialMessage && !m.streaming), userMessage]
+    const history = [...messages.filter((m) => !m.streaming), userMessage]
       .map(({ role, content: text }) => ({ role, content: text }));
 
     setInput('');
@@ -250,7 +250,7 @@ export default function App() {
             <button className="icon-button" onClick={loadModels} title="Muat ulang model" aria-label="Muat ulang model">
               <Icon name="refresh" />
             </button>
-            <button className="icon-button" onClick={() => setMessages([initialMessage])} disabled={generating} title="Percakapan baru" aria-label="Percakapan baru">
+            <button className="icon-button" onClick={() => setMessages(initialMessages)} disabled={generating} title="Percakapan baru" aria-label="Percakapan baru">
               <Icon name="plus" />
             </button>
           </div>
