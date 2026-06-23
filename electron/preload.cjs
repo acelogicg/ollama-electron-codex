@@ -26,3 +26,13 @@ contextBridge.exposeInMainWorld('github', {
   listRepos: () => ipcRenderer.invoke('github:list-repos'),
   getWorkspaceRepo: () => ipcRenderer.invoke('github:get-workspace-repo')
 });
+
+contextBridge.exposeInMainWorld('workspace', {
+  getContext: () => ipcRenderer.invoke('workspace:get-context')
+});
+
+contextBridge.exposeInMainWorld('git', {
+  status: () => ipcRenderer.invoke('git:status'),
+  diff: () => ipcRenderer.invoke('git:diff'),
+  log: () => ipcRenderer.invoke('git:log')
+});

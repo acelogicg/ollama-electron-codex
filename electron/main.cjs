@@ -1,11 +1,26 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { execFile } = require('child_process');
+const fs = require('fs/promises');
 const path = require('path');
 const { promisify } = require('util');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const activeRequests = new Map();
 const execFileAsync = promisify(execFile);
+const MAX_CONTEXT_FILES = 10;
+const MAX_FILE_CHARS = 4000;
+const MAX_TREE_FILES = 160;
+const contextFilePatterns = [
+  /^package\.json$/,
+  /^README\.md$/i,
+  /^src\/App\.jsx$/,
+  /^src\/main\.jsx$/,
+  /^electron\/main\.cjs$/,
+  /^electron\/preload\.cjs$/,
+  /^vite\.config\.js$/,
+  /^src\/components\/.*\.(jsx|js)$/,
+  /^src\/utils\/.*\.(jsx|js)$/
+];
 
 async function loadDevServer(win, attempts = 20) {
   const url = 'http://127.0.0.1:5173';
@@ -81,6 +96,21 @@ async function execGit(args, cwd = process.cwd()) {
   return stdout.trim();
 }
 
+function normalizeRepoPath(filePath) {
+  return filePath.replace(/\\/g, '/');
+}
+
+function isUsefulContextFile(filePath) {
+  const normalized = normalizeRepoPath(filePath);
+  return contextFilePatterns.some((pattern) => pattern.test(normalized));
+}
+
+function keepWithinRoot(root, filePath) {
+  const resolvedRoot = path.resolve(root);
+  const resolvedPath = path.resolve(root, filePath);
+  return resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
 async function getWorkspaceRepo() {
   try {
     const root = await execGit(['rev-parse', '--show-toplevel']);
@@ -106,6 +136,55 @@ async function getWorkspaceRepo() {
     };
   } catch (_error) {
     return null;
+  }
+}
+
+async function getWorkspaceContext() {
+  const repo = await getWorkspaceRepo();
+  if (!repo?.root) return null;
+
+  try {
+    const [trackedFiles, diffStat, diff, branches] = await Promise.all([
+      execGit(['ls-files'], repo.root).catch(() => ''),
+      execGit(['diff', '--stat'], repo.root).catch(() => ''),
+      execGit(['diff', '--', ':!package-lock.json'], repo.root).catch(() => ''),
+      execGit(['branch', '--list'], repo.root).catch(() => '')
+    ]);
+
+    const files = trackedFiles.split(/\r?\n/).filter(Boolean).map(normalizeRepoPath);
+    const selectedFiles = files.filter(isUsefulContextFile).slice(0, MAX_CONTEXT_FILES);
+    const snippets = [];
+
+    for (const filePath of selectedFiles) {
+      if (!keepWithinRoot(repo.root, filePath)) continue;
+      try {
+        const content = await fs.readFile(path.join(repo.root, filePath), 'utf8');
+        snippets.push({
+          path: filePath,
+          content: content.slice(0, MAX_FILE_CHARS),
+          truncated: content.length > MAX_FILE_CHARS
+        });
+      } catch (_error) {
+        // Skip unreadable files without failing the whole workspace context.
+      }
+    }
+
+    return {
+      repo,
+      files: files.slice(0, MAX_TREE_FILES),
+      omittedFileCount: Math.max(files.length - MAX_TREE_FILES, 0),
+      snippets,
+      git: {
+        status: repo.status,
+        diffStat,
+        diff: diff.slice(0, 12000),
+        diffTruncated: diff.length > 12000,
+        branches,
+        commits: repo.commits
+      }
+    };
+  } catch (_error) {
+    return { repo, files: [], omittedFileCount: 0, snippets: [], git: { status: repo.status, commits: repo.commits } };
   }
 }
 
@@ -142,6 +221,19 @@ ipcMain.handle('ollama:list-models', async () => {
 
 ipcMain.handle('github:list-repos', async () => listGitHubRepos());
 ipcMain.handle('github:get-workspace-repo', async () => getWorkspaceRepo());
+ipcMain.handle('workspace:get-context', async () => getWorkspaceContext());
+ipcMain.handle('git:status', async () => {
+  const repo = await getWorkspaceRepo();
+  return repo?.root ? execGit(['status', '--short'], repo.root) : '';
+});
+ipcMain.handle('git:diff', async () => {
+  const repo = await getWorkspaceRepo();
+  return repo?.root ? execGit(['diff'], repo.root) : '';
+});
+ipcMain.handle('git:log', async () => {
+  const repo = await getWorkspaceRepo();
+  return repo?.root ? execGit(['log', '-20', '--pretty=format:%h %s'], repo.root) : '';
+});
 
 ipcMain.handle('ollama:preload-model', async (_event, model) => {
   if (!model) throw new Error('Model belum dipilih.');
