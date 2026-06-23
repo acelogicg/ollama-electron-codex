@@ -41,7 +41,6 @@ function createWindow() {
     loadDevServer(win).catch((error) => {
       console.error('Gagal memuat Vite dev server:', error);
     });
-    win.webContents.openDevTools({ mode: 'detach' });
   }
 }
 
