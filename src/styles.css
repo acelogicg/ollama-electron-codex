@@ -68,6 +68,12 @@ button { color: inherit; }
 }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #a15c5c; }
 .status-dot.online { background: #60b989; }
+.engine-label {
+  color: #89929f;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
 .toolbar { gap: 6px; -webkit-app-region: no-drag; }
 .mode-switcher, .repo-picker {
   gap: 4px;
@@ -333,6 +339,9 @@ textarea::placeholder { color: #6d7480; }
   border-bottom: 1px solid rgba(255, 255, 255, .06);
 }
 .settings-row:last-child { border-bottom: 0; }
+.settings-row-stack {
+  display: block;
+}
 .settings-row h2 {
   margin: 0 0 4px;
   font-size: 13px;

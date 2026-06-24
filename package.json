@@ -11,10 +11,11 @@
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.84",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "concurrently": "latest",

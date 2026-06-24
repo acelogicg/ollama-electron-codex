@@ -1,6 +1,7 @@
 import Icon from './Icon.jsx';
 
 export default function Topbar({
+  engineProvider,
   model,
   models,
   selected,
@@ -28,10 +29,11 @@ export default function Topbar({
   return (
     <header className="topbar">
       <div className="title-group">
-        <span className="app-mark" title="Ollama">
+        <span className="app-mark" title={engineProvider === 'browser' ? 'Browser WebGPU' : 'Ollama'}>
           <Icon name="app" />
         </span>
         <span className={`status-dot ${model ? 'online' : ''}`} title={status} />
+        <span className="engine-label">{engineProvider === 'browser' ? 'WebGPU' : 'Ollama'}</span>
       </div>
 
       <div className="toolbar">
@@ -74,11 +76,11 @@ export default function Topbar({
           </button>
         </div>}
 
-        {!showingSettings && <select value={model} onChange={(event) => onModelChange(event.target.value)} disabled={loadingModels || generating} title={selected?.name || 'Pilih model'}>
+        {!showingSettings && <select value={model} onChange={(event) => onModelChange(event.target.value)} disabled={loadingModels || generating} title={selected?.label || selected?.name || 'Pilih model'}>
           {!models.length && <option value="">Tidak ada model</option>}
-          {models.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+          {models.map((item) => <option key={item.name} value={item.name}>{item.label || item.name}</option>)}
         </select>}
-        {!showingSettings && <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">
+        {!showingSettings && <button className="icon-button" onClick={onReloadModels} title={engineProvider === 'browser' ? 'Muat ulang model browser' : 'Muat ulang model'} aria-label={engineProvider === 'browser' ? 'Muat ulang model browser' : 'Muat ulang model'}>
           <Icon name="refresh" />
         </button>}
         {!showingSettings && <button className="icon-button" onClick={onNewChat} title="Percakapan baru" aria-label="Percakapan baru">
