@@ -22,6 +22,10 @@ const contextFilePatterns = [
   /^src\/utils\/.*\.(jsx|js)$/
 ];
 
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+
 async function loadDevServer(win, attempts = 20) {
   const url = 'http://127.0.0.1:5173';
 
@@ -47,7 +51,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webgl: true
     }
   });
 

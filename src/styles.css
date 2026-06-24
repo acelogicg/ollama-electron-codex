@@ -17,6 +17,14 @@ button { color: inherit; }
   height: 100%;
   z-index: 0;
   opacity: .18;
+  background:
+    radial-gradient(circle at 22% 24%, rgba(34, 129, 165, .28), transparent 28%),
+    radial-gradient(circle at 74% 68%, rgba(87, 39, 160, .24), transparent 24%),
+    linear-gradient(180deg, #07111f 0%, #0b0d11 100%);
+}
+
+.webgl-bg[data-webgl-fallback="true"] {
+  opacity: .42;
 }
 
 .app-shell {
