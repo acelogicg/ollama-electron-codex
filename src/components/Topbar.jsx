@@ -113,7 +113,13 @@ export default function Topbar({
             <ModelBadges capabilities={selected?.capabilities} />
           </div>
         )}
-        {!showingSettings && <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">
+        {!showingSettings && <button
+          className={`icon-button ${loadingModels ? 'refreshing' : ''}`}
+          onClick={onReloadModels}
+          title={loadingModels ? 'Memeriksa status model...' : 'Muat ulang dan periksa kesiapan model'}
+          aria-label="Muat ulang dan periksa kesiapan model"
+          disabled={loadingModels || generating}
+        >
           <Icon name="refresh" />
         </button>}
         {!showingSettings && <button className="icon-button" onClick={onNewChat} title="Percakapan baru" aria-label="Percakapan baru">

@@ -27,6 +27,7 @@ export default function App() {
   const [workspaceContext, setWorkspaceContext] = useState(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [modelProbeVersion, setModelProbeVersion] = useState(0);
   const [modelLoadState, setModelLoadState] = useState('idle');
   const [modelLoadError, setModelLoadError] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -39,6 +40,7 @@ export default function App() {
   const [tips, setTips] = useState([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const bottomRef = useRef(null);
+  const modelRefreshInFlight = useRef(false);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
   const selectedRepo = useMemo(() => (
@@ -86,7 +88,11 @@ export default function App() {
   const activeModelReady = agentReadiness.ready;
 
   const loadModels = async () => {
+    if (modelRefreshInFlight.current) return false;
+    modelRefreshInFlight.current = true;
     setLoadingModels(true);
+    setModelLoadState('loading');
+    setModelLoadError('');
     setStatus('Memuat model LM Studio...');
     try {
       const list = await window.lmstudio.listModels(baseUrl);
@@ -99,12 +105,15 @@ export default function App() {
       setStatus(agentModels.length
         ? 'Model agent ditemukan'
         : (list.length ? 'Tidak ada model yang mendukung tool calling' : 'Model LM Studio tidak ditemukan'));
+      return true;
     } catch (error) {
       setModelLoadState('error');
       setModelLoadError(error.message);
       setStatus(`LM Studio offline: ${error.message}`);
+      return false;
     } finally {
       setLoadingModels(false);
+      modelRefreshInFlight.current = false;
     }
   };
 
@@ -138,7 +147,8 @@ export default function App() {
   };
 
   const reloadActiveModels = async () => {
-    await loadModels();
+    const refreshed = await loadModels();
+    if (refreshed) setModelProbeVersion((version) => version + 1);
   };
 
   useEffect(() => { loadModels(); }, []);
@@ -266,7 +276,14 @@ export default function App() {
         setStatus(`Gagal: ${error.message}`);
       });
     return () => { cancelled = true; };
-  }, [model, baseUrl, selected?.name, selected?.capabilities?.tools, selected?.capabilities?.embedding]);
+  }, [
+    model,
+    baseUrl,
+    modelProbeVersion,
+    selected?.name,
+    selected?.capabilities?.tools,
+    selected?.capabilities?.embedding
+  ]);
 
   useEffect(() => {
     const offChunk = window.lmstudio.onChunk(({ requestId: id, data }) => {
@@ -460,7 +477,7 @@ export default function App() {
 
   const applyBaseUrl = async () => {
     setStatus('Menghubungkan ke LM Studio...');
-    await loadModels();
+    await reloadActiveModels();
   };
 
   const runTerminalCommand = async (command) => {

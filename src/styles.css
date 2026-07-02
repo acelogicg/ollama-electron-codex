@@ -237,6 +237,8 @@ select {
   cursor: pointer;
 }
 .icon-button:hover { background: #1b202a; }
+.icon-button.refreshing .icon { animation: refresh-spin .8s linear infinite; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
 .icon-button.active {
   color: #8cc7ff;
   background: rgba(140, 199, 255, .12);
@@ -896,6 +898,7 @@ textarea::placeholder { color: #6d7480; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .icon-button.refreshing .icon,
   .agent-progress-track span,
   .agent-progress-pulse,
   .tool-group-status.running {
