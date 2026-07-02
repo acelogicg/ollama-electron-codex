@@ -412,7 +412,19 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
   let genElapsed = 0;
   let completedSteps = 0;
 
+  const accumulate = (usage, elapsedMs) => {
+    completedSteps += 1;
+    genElapsed += elapsedMs;
+    if (usage) {
+      totalCompletion += usage.completion_tokens || 0;
+      totalPrompt += usage.prompt_tokens || 0;
+      totalTokens += usage.total_tokens || 0;
+    }
+  };
+
   try {
+    let sawFinalAnswer = false;
+
     for (let step = 0; step < AGENT_MAX_STEPS; step += 1) {
       const { content, toolCalls, usage, elapsedMs } = await streamCompletion({
         event,
@@ -425,13 +437,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
         signal: controller.signal
       });
 
-      completedSteps += 1;
-      genElapsed += elapsedMs;
-      if (usage) {
-        totalCompletion += usage.completion_tokens || 0;
-        totalPrompt += usage.prompt_tokens || 0;
-        totalTokens += usage.total_tokens || 0;
-      }
+      accumulate(usage, elapsedMs);
 
       const assistantMessage = { role: 'assistant', content: content || '' };
       if (toolCalls.length) {
@@ -443,7 +449,10 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
       }
       convo.push(assistantMessage);
 
-      if (!toolCalls.length) break;
+      if (!toolCalls.length) {
+        if (content && content.trim()) sawFinalAnswer = true;
+        break;
+      }
 
       for (let index = 0; index < toolCalls.length; index += 1) {
         const call = toolCalls[index];
@@ -464,6 +473,26 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
           requestId, phase: 'result', id: callId, name: call.name, result
         });
         convo.push({ role: 'tool', tool_call_id: callId, content: String(result).slice(0, TOOL_OUTPUT_LIMIT) });
+      }
+    }
+
+    // Model kadang berhenti setelah memakai tool tanpa memberi jawaban teks, atau batas
+    // langkah tercapai. Paksa satu panggilan terakhir tanpa tool agar selalu ada ringkasan.
+    if (!sawFinalAnswer && !controller.signal.aborted) {
+      convo.push({
+        role: 'user',
+        content: 'Berikan jawaban/ringkasan akhir sekarang berdasarkan hasil tool di atas. Jangan panggil tool lagi.'
+      });
+      const { content, usage, elapsedMs } = await streamCompletion({
+        event, requestId, baseUrl, model, messages: convo, options, signal: controller.signal
+      });
+      accumulate(usage, elapsedMs);
+
+      if (!content || !content.trim()) {
+        event.sender.send('lmstudio:chat-chunk', {
+          requestId,
+          data: { message: { content: 'Agent selesai menjalankan tool tetapi model tidak memberi ringkasan. Coba tanyakan detail spesifik, atau naikkan Context Length model di LM Studio.', thinking: '' } }
+        });
       }
     }
 
