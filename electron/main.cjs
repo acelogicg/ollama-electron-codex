@@ -489,6 +489,14 @@ function looksDeferring(text) {
   return /(ingin saya baca|apakah ada file|file tertentu|anda perlu|anda harus|yang perlu saya lakukan|which file|should i (read|open)|shall i|do you want me to|let me know|beri tahu saya)/i.test(trimmed);
 }
 
+function looksLikeWorkspaceChangeRequest(messages) {
+  const latestUserMessage = [...messages]
+    .reverse()
+    .find((message) => message.role === 'user' && message.content);
+  const text = String(latestUserMessage?.content || '');
+  return /\b(tambah(?:kan)?|buat(?:kan)?|ubah|ganti|edit|perbaiki|benahi|implementasi(?:kan)?|refactor|hapus|fix|add|create|build|change|modify|update|remove|implement)\b/i.test(text);
+}
+
 function normalizeToolPath(filePath) {
   const normalized = path.normalize(String(filePath || '')).replace(/\\/g, '/');
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
@@ -544,12 +552,15 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
   const controller = new AbortController();
   activeRequests.set(requestId, controller);
   const convo = [...messages];
+  const expectsWorkspaceChange = looksLikeWorkspaceChangeRequest(messages);
 
   let totalCompletion = 0;
   let totalPrompt = 0;
   let totalTokens = 0;
   let genElapsed = 0;
   let completedSteps = 0;
+  let workspaceToolCalls = 0;
+  let inspectedWorkspace = false;
   const changedFiles = new Set();
   const reviewedFiles = new Set();
   const unresolvedFailures = new Map();
@@ -568,6 +579,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
   try {
     let sawFinalAnswer = false;
     let nudges = 0;
+    let taskNudges = 0;
     const MAX_NUDGES = 2;
 
     for (let step = 0; step < AGENT_MAX_STEPS; step += 1) {
@@ -620,6 +632,15 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
           continue;
         }
 
+        if (expectsWorkspaceChange && !inspectedWorkspace && taskNudges < MAX_NUDGES) {
+          taskNudges += 1;
+          convo.push({
+            role: 'user',
+            content: `Permintaan ini membutuhkan perubahan workspace, tetapi inspeksi sumber belum memadai${workspaceToolCalls ? ' (listing saja belum cukup)' : ''}. Jangan hanya memberi contoh atau instruksi. Gunakan read_file/search_text pada sumber yang relevan, pilih implementasi paling aman dan sederhana, lakukan edit, lalu validasi hasilnya sampai berhasil.`
+          });
+          continue;
+        }
+
         // Model berhenti tanpa memakai tool memadai dan malah minta izin/bertanya:
         // dorong agar lanjut bekerja otomatis, bukan langsung diterima sebagai jawaban.
         if (finalText && looksDeferring(finalText) && nudges < MAX_NUDGES) {
@@ -636,6 +657,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
 
       for (let index = 0; index < toolCalls.length; index += 1) {
         const call = toolCalls[index];
+        workspaceToolCalls += 1;
         const callId = assistantMessage.tool_calls[index].id;
         let args = {};
         let argumentError = null;
@@ -659,6 +681,9 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
           }
         }
         const succeeded = isSuccessfulToolResult(result);
+        if (succeeded && (call.name === 'read_file' || call.name === 'search_text')) {
+          inspectedWorkspace = true;
+        }
 
         const isMutation = call.name === 'write_file' || call.name === 'edit_file';
         if (succeeded) unresolvedFailures.delete(call.name);
