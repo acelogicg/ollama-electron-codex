@@ -15,11 +15,32 @@ export default function MessageStats({ stats }) {
         <Icon name="circle" />
         {(tokensPerSecond || 0).toFixed(1)} tok/s
       </span>
-      <span className="stat">{formatNumber(completionTokens)} token keluar</span>
-      {promptTokens ? <span className="stat">{formatNumber(promptTokens)} token masuk</span> : null}
-      {totalTokens ? <span className="stat">{formatNumber(totalTokens)} total</span> : null}
-      <span className="stat">{seconds.toFixed(1)}s</span>
-      {steps > 1 ? <span className="stat">{steps} langkah</span> : null}
+      <span className="stat out">
+        <Icon name="circle" />
+        {formatNumber(completionTokens)} token keluar
+      </span>
+      {promptTokens ? (
+        <span className="stat in">
+          <Icon name="circle" />
+          {formatNumber(promptTokens)} token masuk
+        </span>
+      ) : null}
+      {totalTokens ? (
+        <span className="stat total">
+          <Icon name="circle" />
+          {formatNumber(totalTokens)} total
+        </span>
+      ) : null}
+      <span className="stat time">
+        <Icon name="circle" />
+        {seconds.toFixed(1)}s
+      </span>
+      {steps > 1 ? (
+        <span className="stat steps">
+          <Icon name="circle" />
+          {steps} langkah
+        </span>
+      ) : null}
     </div>
   );
 }

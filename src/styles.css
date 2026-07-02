@@ -286,13 +286,19 @@ select {
   gap: 4px;
   white-space: nowrap;
 }
-.message-stats .stat.tps { color: #7fd6a1; font-weight: 600; }
-.message-stats .stat.tps .icon {
-  width: 9px;
-  height: 9px;
-  fill: #7fd6a1;
+.message-stats .stat .icon {
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
   stroke: none;
+  opacity: .9;
 }
+.message-stats .stat.tps { color: #7fd6a1; font-weight: 600; }
+.message-stats .stat.out { color: #8fb4e8; }
+.message-stats .stat.in { color: #c8a3e6; }
+.message-stats .stat.total { color: #e0b062; }
+.message-stats .stat.time { color: #8b95a3; }
+.message-stats .stat.steps { color: #7f8a98; }
 
 .message-row.thinking .bubble {
   width: fit-content;
