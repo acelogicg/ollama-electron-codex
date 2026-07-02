@@ -220,10 +220,39 @@ async function listGitHubRepos(cwd = process.cwd()) {
   }
 }
 
+function inferCapabilities(id, type) {
+  const name = String(id || '').toLowerCase();
+  const embedding = type === 'embeddings' || /embed/.test(name);
+  const vision = type === 'vlm' || /(^|[-_/])(vl|vlm|vision|llava|multimodal)([-_/]|$)/.test(name);
+  const thinking = /think|reason|(^|[-_/])r1([-_/]|$)|deepseek-r1|qwq|magistral|(^|[-_/])o[13]([-_/]|$)/.test(name);
+  const tools = !embedding;
+  return { tools, thinking, vision, embedding };
+}
+
 ipcMain.handle('lmstudio:list-models', async (_event, baseUrl) => {
-  const response = await lmstudioFetch(baseUrl, '/v1/models');
-  const data = await response.json();
-  return (data.data || []).map((item) => ({ name: item.id, label: item.id }));
+  // API native LM Studio (/api/v0) memberi metadata lebih kaya (type, arch) untuk
+  // mendeteksi kapabilitas. Kalau tidak tersedia, fallback ke /v1/models.
+  try {
+    const response = await lmstudioFetch(baseUrl, '/api/v0/models');
+    const data = await response.json();
+    return (data.data || []).map((item) => ({
+      name: item.id,
+      label: item.id,
+      type: item.type || 'llm',
+      arch: item.arch || '',
+      capabilities: inferCapabilities(item.id, item.type)
+    }));
+  } catch (_error) {
+    const response = await lmstudioFetch(baseUrl, '/v1/models');
+    const data = await response.json();
+    return (data.data || []).map((item) => ({
+      name: item.id,
+      label: item.id,
+      type: 'llm',
+      arch: '',
+      capabilities: inferCapabilities(item.id)
+    }));
+  }
 });
 
 ipcMain.handle('lmstudio:list-tools', () => (

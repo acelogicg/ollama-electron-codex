@@ -1,4 +1,5 @@
 import Icon from './Icon.jsx';
+import ModelBadges from './ModelBadges.jsx';
 
 export default function Topbar({
   model,
@@ -81,6 +82,7 @@ export default function Topbar({
           {!models.length && <option value="">Tidak ada model</option>}
           {models.map((item) => <option key={item.name} value={item.name}>{item.label || item.name}</option>)}
         </select>}
+        {!showingSettings && <ModelBadges capabilities={selected?.capabilities} />}
         {!showingSettings && <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">
           <Icon name="refresh" />
         </button>}

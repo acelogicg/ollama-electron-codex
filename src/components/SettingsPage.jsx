@@ -1,3 +1,5 @@
+import ModelBadges from './ModelBadges.jsx';
+
 const LOCAL_BASE_URL = 'http://127.0.0.1:1234';
 
 export default function SettingsPage({
