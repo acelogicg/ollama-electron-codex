@@ -16,12 +16,12 @@ export default function MessageStats({ stats }) {
         {(tokensPerSecond || 0).toFixed(1)} tok/s
       </span>
       <span className="stat out" title="Token keluar (completion)">
-        <Icon name="circle" />
+        <Icon name="arrow-up" />
         {formatNumber(completionTokens)}
       </span>
       {promptTokens ? (
         <span className="stat in" title="Token masuk (prompt)">
-          <Icon name="circle" />
+          <Icon name="arrow-down" />
           {formatNumber(promptTokens)}
         </span>
       ) : null}
