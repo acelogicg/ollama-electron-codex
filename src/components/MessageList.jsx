@@ -1,4 +1,5 @@
 import MessageContent from './MessageContent.jsx';
+import MessageStats from './MessageStats.jsx';
 import ToolMessage from './ToolMessage.jsx';
 
 export default function MessageList({ messages, bottomRef }) {
@@ -28,6 +29,9 @@ export default function MessageList({ messages, bottomRef }) {
                     thinkingActive={message.thinkingActive}
                   />
                 </div>
+                {message.role === 'assistant' && !message.streaming && message.stats
+                  ? <MessageStats stats={message.stats} />
+                  : null}
               </div>
             </article>
           )

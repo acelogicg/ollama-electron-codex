@@ -84,7 +84,8 @@ const paths = {
       <path d="M3.5 6.5h6l2 2h9v9a2 2 0 0 1-2 2h-15v-13Z" />
       <path d="M3.5 6.5v-2h5.25l1.75 2" />
     </>
-  )
+  ),
+  circle: <circle cx="12" cy="12" r="5" />
 };
 
 export default function Icon({ name }) {

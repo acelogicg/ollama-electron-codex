@@ -167,11 +167,22 @@ export default function App() {
       }
     });
 
-    const offDone = window.lmstudio.onDone(({ requestId: id }) => {
+    const offDone = window.lmstudio.onDone(({ requestId: id, stats }) => {
       if (id !== requestId) return;
-      setMessages((current) => current
-        .map((message) => (message.streaming ? { ...message, streaming: false } : message))
-        .filter((message) => !(message.role === 'assistant' && !message.content?.trim())));
+      setMessages((current) => {
+        const cleaned = current
+          .map((message) => (message.streaming ? { ...message, streaming: false } : message))
+          .filter((message) => !(message.role === 'assistant' && !message.content?.trim()));
+        if (stats) {
+          for (let i = cleaned.length - 1; i >= 0; i -= 1) {
+            if (cleaned[i].role === 'assistant') {
+              cleaned[i] = { ...cleaned[i], stats };
+              break;
+            }
+          }
+        }
+        return cleaned;
+      });
       setGenerating(false);
       setRequestId(null);
       setStatus('Siap');

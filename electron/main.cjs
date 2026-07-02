@@ -287,6 +287,7 @@ async function streamCompletion({ event, requestId, baseUrl, model, messages, op
     model,
     messages,
     stream: true,
+    stream_options: { include_usage: true },
     temperature: options?.temperature ?? 0.7,
     ...(options || {})
   };
@@ -295,6 +296,7 @@ async function streamCompletion({ event, requestId, baseUrl, model, messages, op
     body.tool_choice = 'auto';
   }
 
+  const startedAt = Date.now();
   const response = await lmstudioFetch(baseUrl, '/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -307,6 +309,7 @@ async function streamCompletion({ event, requestId, baseUrl, model, messages, op
   let buffer = '';
   let content = '';
   let finishReason = null;
+  let usage = null;
   const toolCallsByIndex = new Map();
 
   const handleDelta = (choice) => {
@@ -339,6 +342,7 @@ async function streamCompletion({ event, requestId, baseUrl, model, messages, op
       const payloadText = trimmed.slice(5).trim();
       if (payloadText === '[DONE]') continue;
       const json = JSON.parse(payloadText);
+      if (json.usage) usage = json.usage;
       handleDelta(json.choices?.[0]);
     }
   }
@@ -348,7 +352,13 @@ async function streamCompletion({ event, requestId, baseUrl, model, messages, op
     .map(([, call]) => call)
     .filter((call) => call.name);
 
-  return { content, toolCalls, finishReason };
+  return { content, toolCalls, finishReason, usage, elapsedMs: Date.now() - startedAt };
+}
+
+function buildStats({ completionTokens, promptTokens, totalTokens, elapsedMs, steps }) {
+  const seconds = elapsedMs / 1000;
+  const tokensPerSecond = seconds > 0 && completionTokens ? completionTokens / seconds : 0;
+  return { tokensPerSecond, completionTokens, promptTokens, totalTokens, elapsedMs, steps };
 }
 
 ipcMain.handle('lmstudio:chat', async (event, payload) => {
@@ -359,8 +369,17 @@ ipcMain.handle('lmstudio:chat', async (event, payload) => {
   activeRequests.set(requestId, controller);
 
   try {
-    await streamCompletion({ event, requestId, baseUrl, model, messages, options, signal: controller.signal });
-    event.sender.send('lmstudio:chat-done', { requestId });
+    const { usage, elapsedMs } = await streamCompletion({ event, requestId, baseUrl, model, messages, options, signal: controller.signal });
+    event.sender.send('lmstudio:chat-done', {
+      requestId,
+      stats: buildStats({
+        completionTokens: usage?.completion_tokens || 0,
+        promptTokens: usage?.prompt_tokens || 0,
+        totalTokens: usage?.total_tokens || 0,
+        elapsedMs,
+        steps: 1
+      })
+    });
     return { ok: true };
   } catch (error) {
     if (error.name !== 'AbortError') {
@@ -549,9 +568,15 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
   activeRequests.set(requestId, controller);
   const convo = [...messages];
 
+  let totalCompletion = 0;
+  let totalPrompt = 0;
+  let totalTokens = 0;
+  let genElapsed = 0;
+  let completedSteps = 0;
+
   try {
     for (let step = 0; step < AGENT_MAX_STEPS; step += 1) {
-      const { content, toolCalls } = await streamCompletion({
+      const { content, toolCalls, usage, elapsedMs } = await streamCompletion({
         event,
         requestId,
         baseUrl,
@@ -561,6 +586,14 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
         tools: AGENT_TOOLS,
         signal: controller.signal
       });
+
+      completedSteps += 1;
+      genElapsed += elapsedMs;
+      if (usage) {
+        totalCompletion += usage.completion_tokens || 0;
+        totalPrompt += usage.prompt_tokens || 0;
+        totalTokens += usage.total_tokens || 0;
+      }
 
       const assistantMessage = { role: 'assistant', content: content || '' };
       if (toolCalls.length) {
@@ -596,7 +629,16 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
       }
     }
 
-    event.sender.send('lmstudio:chat-done', { requestId });
+    event.sender.send('lmstudio:chat-done', {
+      requestId,
+      stats: buildStats({
+        completionTokens: totalCompletion,
+        promptTokens: totalPrompt,
+        totalTokens,
+        elapsedMs: genElapsed,
+        steps: completedSteps
+      })
+    });
     return { ok: true };
   } catch (error) {
     if (error.name !== 'AbortError') {
