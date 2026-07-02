@@ -364,6 +364,15 @@ function buildStats({ completionTokens, promptTokens, totalTokens, elapsedMs, st
   return { tokensPerSecond, completionTokens, promptTokens, totalTokens, elapsedMs, steps };
 }
 
+// Deteksi jawaban "final" yang sebenarnya cuma minta izin / bertanya ke user
+// alih-alih benar-benar bekerja (mis. "Apakah ada file yang ingin saya baca?").
+function looksDeferring(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return false;
+  if (/\?\s*$/.test(trimmed)) return true;
+  return /(ingin saya baca|apakah ada file|file tertentu|anda perlu|anda harus|yang perlu saya lakukan|which file|should i (read|open)|shall i|do you want me to|let me know|beri tahu saya)/i.test(trimmed);
+}
+
 ipcMain.handle('lmstudio:chat', async (event, payload) => {
   const { requestId, model, messages, options, baseUrl } = payload;
   if (!requestId || !model) throw new Error('requestId dan model wajib diisi.');
@@ -424,6 +433,8 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
 
   try {
     let sawFinalAnswer = false;
+    let nudges = 0;
+    const MAX_NUDGES = 2;
 
     for (let step = 0; step < AGENT_MAX_STEPS; step += 1) {
       const { content, toolCalls, usage, elapsedMs } = await streamCompletion({
@@ -450,7 +461,18 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
       convo.push(assistantMessage);
 
       if (!toolCalls.length) {
-        if (content && content.trim()) sawFinalAnswer = true;
+        const finalText = (content || '').trim();
+        // Model berhenti tanpa memakai tool memadai dan malah minta izin/bertanya:
+        // dorong agar lanjut bekerja otomatis, bukan langsung diterima sebagai jawaban.
+        if (finalText && looksDeferring(finalText) && nudges < MAX_NUDGES) {
+          nudges += 1;
+          convo.push({
+            role: 'user',
+            content: 'Jangan meminta izin dan jangan bertanya file mana. Lanjutkan sendiri: pakai read_file/search_text untuk membaca file sumber yang relevan, periksa kodenya, temukan bug konkret, lalu laporkan dengan path file. Teruskan memakai tool sampai benar-benar selesai.'
+          });
+          continue;
+        }
+        if (finalText) sawFinalAnswer = true;
         break;
       }
 
