@@ -637,16 +637,26 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
       for (let index = 0; index < toolCalls.length; index += 1) {
         const call = toolCalls[index];
         const callId = assistantMessage.tool_calls[index].id;
-        const args = safeParseArgs(call.arguments);
+        let args = {};
+        let argumentError = null;
+        try {
+          args = safeParseArgs(call.arguments);
+        } catch (error) {
+          argumentError = error;
+        }
         event.sender.send('lmstudio:agent-tool', {
           requestId, phase: 'call', id: callId, name: call.name, arguments: args
         });
 
         let result;
-        try {
-          result = await runAgentTool(call.name, args, root);
-        } catch (error) {
-          result = `ERROR: ${error.message}`;
+        if (argumentError) {
+          result = `ERROR: ${argumentError.message}`;
+        } else {
+          try {
+            result = await runAgentTool(call.name, args, root);
+          } catch (error) {
+            result = `ERROR: ${error.message}`;
+          }
         }
         const succeeded = isSuccessfulToolResult(result);
 

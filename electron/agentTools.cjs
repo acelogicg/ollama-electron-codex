@@ -39,7 +39,7 @@ const AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'edit_file',
-      description: 'Ganti kemunculan pertama old_text dengan new_text di sebuah file. old_text harus cocok persis.',
+      description: 'Ganti kemunculan pertama old_text dengan new_text di sebuah file. Baca file lebih dulu; old_text harus cocok dengan isi aktual. Perbedaan line ending LF/CRLF ditangani otomatis.',
       parameters: {
         type: 'object',
         properties: {
@@ -94,8 +94,8 @@ function safeParseArgs(text) {
   if (!text) return {};
   try {
     return JSON.parse(text);
-  } catch (_error) {
-    return {};
+  } catch (error) {
+    throw new Error(`Argumen tool bukan JSON valid: ${error.message}. Argumen mentah: ${String(text).slice(0, 500)}`);
   }
 }
 
@@ -166,14 +166,58 @@ async function runAgentTool(name, args, root) {
       return `OK: menulis ${args.path} (${(args.content ?? '').length} karakter).`;
     }
     case 'edit_file': {
-      const target = resolveInsideRoot(root, args.path);
-      const original = await fs.readFile(target, 'utf8');
-      if (!args.old_text || !original.includes(args.old_text)) {
-        throw new Error('old_text tidak ditemukan di file. Baca file dulu untuk mencocokkan teks persis.');
+      if (typeof args.path !== 'string' || !args.path.trim()) {
+        throw new Error('path edit_file wajib berupa path file relatif yang tidak kosong.');
       }
-      const updated = original.replace(args.old_text, args.new_text ?? '');
+      if (typeof args.old_text !== 'string' || !args.old_text) {
+        throw new Error('old_text edit_file wajib diisi. Baca file terlebih dahulu lalu kirim teks yang cocok.');
+      }
+      if (typeof args.new_text !== 'string') {
+        throw new Error('new_text edit_file wajib berupa string. Gunakan string kosong jika memang ingin menghapus old_text.');
+      }
+
+      const target = resolveInsideRoot(root, args.path);
+      let original;
+      try {
+        original = await fs.readFile(target, 'utf8');
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        const suggestions = await findFileSuggestions(root, args.path);
+        const hint = suggestions.length ? ` Kandidat path: ${suggestions.join(', ')}.` : '';
+        throw new Error(`File "${args.path}" tidak ditemukan.${hint}`);
+      }
+
+      let matchedText = args.old_text;
+      let replacementText = args.new_text;
+      if (!original.includes(matchedText)) {
+        const crlfOldText = args.old_text.replace(/\r?\n/g, '\r\n');
+        const lfOldText = args.old_text.replace(/\r\n/g, '\n');
+        if (original.includes(crlfOldText)) {
+          matchedText = crlfOldText;
+          replacementText = args.new_text.replace(/\r?\n/g, '\r\n');
+        } else if (original.includes(lfOldText)) {
+          matchedText = lfOldText;
+          replacementText = args.new_text.replace(/\r\n/g, '\n');
+        } else {
+          const anchor = args.old_text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find((line) => line.length >= 4);
+          const anchorIndex = anchor ? original.indexOf(anchor) : -1;
+          const context = anchorIndex >= 0
+            ? ` Bagian yang mirip ditemukan, tetapi blok tidak cocok:\n${original.slice(Math.max(0, anchorIndex - 180), anchorIndex + anchor.length + 180)}`
+            : '';
+          throw new Error(`old_text tidak ditemukan di "${args.path}". Baca ulang file dan gunakan teks aktual yang cocok persis.${context}`);
+        }
+      }
+
+      const updated = original.replace(matchedText, replacementText);
       await fs.writeFile(target, updated, 'utf8');
-      return `OK: mengedit ${args.path}.`;
+      const confirmed = await fs.readFile(target, 'utf8');
+      if (confirmed !== updated) {
+        throw new Error(`Verifikasi edit "${args.path}" gagal: isi setelah ditulis tidak sama dengan hasil yang diharapkan.`);
+      }
+      return `OK: mengedit dan memverifikasi ${args.path} (${matchedText.length} karakter diganti).`;
     }
     case 'list_directory': {
       const target = resolveInsideRoot(root, args.path);
