@@ -151,6 +151,49 @@ select {
 }
 .message-row.user { justify-content: flex-end; }
 .message-row.assistant { justify-content: flex-start; }
+.message-row.tool { justify-content: flex-start; }
+
+.tool-card {
+  max-width: min(86%, 1120px);
+  border: 1px solid rgba(120, 170, 255, .22);
+  border-left: 2px solid rgba(120, 170, 255, .55);
+  border-radius: 8px;
+  background: rgba(18, 24, 34, .9);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.tool-card.running { border-left-color: rgba(255, 205, 120, .7); }
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tool-badge { font-size: 12px; }
+.tool-name { font-weight: 650; color: #cdd6e2; }
+.tool-target {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .07);
+  color: #9fb4d6;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60ch;
+}
+.tool-result {
+  margin: 8px 0 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 6px;
+  background: rgba(8, 11, 16, .8);
+  color: #b9c2cf;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .bubble {
   max-width: min(86%, 1120px);

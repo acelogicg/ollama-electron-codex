@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
-const { execFile } = require('child_process');
+const { execFile, exec } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
 const { promisify } = require('util');
@@ -7,6 +7,9 @@ const { promisify } = require('util');
 const LMSTUDIO_URL = process.env.LMSTUDIO_URL || 'http://127.0.0.1:1234';
 const activeRequests = new Map();
 const execFileAsync = promisify(execFile);
+const execAsync = promisify(exec);
+const AGENT_MAX_STEPS = 16;
+const TOOL_OUTPUT_LIMIT = 20000;
 const MAX_CONTEXT_FILES = 10;
 const MAX_FILE_CHARS = 4000;
 const MAX_TREE_FILES = 160;
@@ -277,6 +280,77 @@ function emitDelta(event, requestId, delta) {
   });
 }
 
+// Menstream satu panggilan /v1/chat/completions. Mengalirkan teks ke renderer via
+// emitDelta dan mengakumulasi tool_calls (format OpenAI) untuk dipakai agent loop.
+async function streamCompletion({ event, requestId, baseUrl, model, messages, options, tools, signal }) {
+  const body = {
+    model,
+    messages,
+    stream: true,
+    temperature: options?.temperature ?? 0.7,
+    ...(options || {})
+  };
+  if (tools && tools.length) {
+    body.tools = tools;
+    body.tool_choice = 'auto';
+  }
+
+  const response = await lmstudioFetch(baseUrl, '/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+    body: JSON.stringify(body)
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  let finishReason = null;
+  const toolCallsByIndex = new Map();
+
+  const handleDelta = (choice) => {
+    const delta = choice?.delta;
+    if (!delta) return;
+    if (delta.content) content += delta.content;
+    emitDelta(event, requestId, delta);
+    if (choice.finish_reason) finishReason = choice.finish_reason;
+
+    for (const call of delta.tool_calls || []) {
+      const index = call.index ?? 0;
+      const existing = toolCallsByIndex.get(index) || { id: '', name: '', arguments: '' };
+      if (call.id) existing.id = call.id;
+      if (call.function?.name) existing.name = call.function.name;
+      if (call.function?.arguments) existing.arguments += call.function.arguments;
+      toolCallsByIndex.set(index, existing);
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data:')) continue;
+      const payloadText = trimmed.slice(5).trim();
+      if (payloadText === '[DONE]') continue;
+      const json = JSON.parse(payloadText);
+      handleDelta(json.choices?.[0]);
+    }
+  }
+
+  const toolCalls = [...toolCallsByIndex.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, call]) => call)
+    .filter((call) => call.name);
+
+  return { content, toolCalls, finishReason };
+}
+
 ipcMain.handle('lmstudio:chat', async (event, payload) => {
   const { requestId, model, messages, options, baseUrl } = payload;
   if (!requestId || !model) throw new Error('requestId dan model wajib diisi.');
@@ -285,39 +359,240 @@ ipcMain.handle('lmstudio:chat', async (event, payload) => {
   activeRequests.set(requestId, controller);
 
   try {
-    const body = {
-      model,
-      messages,
-      stream: true,
-      temperature: options?.temperature ?? 0.7,
-      ...(options || {})
-    };
+    await streamCompletion({ event, requestId, baseUrl, model, messages, options, signal: controller.signal });
+    event.sender.send('lmstudio:chat-done', { requestId });
+    return { ok: true };
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      event.sender.send('lmstudio:chat-error', {
+        requestId,
+        message: error.message || 'Gagal menghubungi LM Studio.'
+      });
+    }
+    return { ok: false };
+  } finally {
+    activeRequests.delete(requestId);
+  }
+});
 
-    const response = await lmstudioFetch(baseUrl, '/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify(body)
-    });
+// --- Agent tools ------------------------------------------------------------
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+const AGENT_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Baca isi file teks (UTF-8) relatif terhadap root workspace.',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'Path relatif file.' } },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Buat atau timpa file teks relatif terhadap root workspace.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          content: { type: 'string' }
+        },
+        required: ['path', 'content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_file',
+      description: 'Ganti kemunculan pertama old_text dengan new_text di sebuah file. old_text harus cocok persis.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string' },
+          old_text: { type: 'string' },
+          new_text: { type: 'string' }
+        },
+        required: ['path', 'old_text', 'new_text']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_directory',
+      description: 'Daftar file dan folder pada direktori relatif terhadap root workspace.',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'Kosongkan untuk root.' } },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_text',
+      description: 'Cari teks/regex pada file di dalam workspace (via git grep / ripgrep).',
+      parameters: {
+        type: 'object',
+        properties: { pattern: { type: 'string' } },
+        required: ['pattern']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description: 'Jalankan perintah shell di root workspace dan kembalikan stdout/stderr. Timeout 60 detik.',
+      parameters: {
+        type: 'object',
+        properties: { command: { type: 'string' } },
+        required: ['command']
+      }
+    }
+  }
+];
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+function safeParseArgs(text) {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return {};
+  }
+}
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data:')) continue;
-        const payloadText = trimmed.slice(5).trim();
-        if (payloadText === '[DONE]') continue;
-        const json = JSON.parse(payloadText);
-        emitDelta(event, requestId, json.choices?.[0]?.delta);
+function resolveInsideRoot(root, relPath) {
+  const target = path.resolve(root, relPath || '.');
+  if (target !== path.resolve(root) && !target.startsWith(`${path.resolve(root)}${path.sep}`)) {
+    throw new Error('Path berada di luar root workspace.');
+  }
+  return target;
+}
+
+async function runAgentTool(name, args, root) {
+  switch (name) {
+    case 'read_file': {
+      const target = resolveInsideRoot(root, args.path);
+      const content = await fs.readFile(target, 'utf8');
+      return content.length > TOOL_OUTPUT_LIMIT
+        ? `${content.slice(0, TOOL_OUTPUT_LIMIT)}\n... [dipotong, ${content.length} karakter total]`
+        : content;
+    }
+    case 'write_file': {
+      const target = resolveInsideRoot(root, args.path);
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, args.content ?? '', 'utf8');
+      return `OK: menulis ${args.path} (${(args.content ?? '').length} karakter).`;
+    }
+    case 'edit_file': {
+      const target = resolveInsideRoot(root, args.path);
+      const original = await fs.readFile(target, 'utf8');
+      if (!args.old_text || !original.includes(args.old_text)) {
+        throw new Error('old_text tidak ditemukan di file. Baca file dulu untuk mencocokkan teks persis.');
+      }
+      const updated = original.replace(args.old_text, args.new_text ?? '');
+      await fs.writeFile(target, updated, 'utf8');
+      return `OK: mengedit ${args.path}.`;
+    }
+    case 'list_directory': {
+      const target = resolveInsideRoot(root, args.path);
+      const entries = await fs.readdir(target, { withFileTypes: true });
+      return entries
+        .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+        .sort()
+        .join('\n') || '(kosong)';
+    }
+    case 'search_text': {
+      if (!args.pattern) throw new Error('pattern wajib diisi.');
+      try {
+        const { stdout } = await execFileAsync('git', ['grep', '-n', '-I', '--', args.pattern], { cwd: root, windowsHide: true });
+        return stdout.slice(0, TOOL_OUTPUT_LIMIT) || '(tidak ada kecocokan)';
+      } catch (error) {
+        if (error.code === 1) return '(tidak ada kecocokan)';
+        throw error;
+      }
+    }
+    case 'run_command': {
+      if (!args.command) throw new Error('command wajib diisi.');
+      try {
+        const { stdout, stderr } = await execAsync(args.command, {
+          cwd: root,
+          windowsHide: true,
+          timeout: 60000,
+          maxBuffer: 4 * 1024 * 1024
+        });
+        const out = `${stdout || ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
+        return (out || '(tidak ada output)').slice(0, TOOL_OUTPUT_LIMIT);
+      } catch (error) {
+        const detail = `${error.stdout || ''}${error.stderr || ''}`.trim();
+        return `EXIT ${error.code ?? '?'}: ${error.message}\n${detail}`.slice(0, TOOL_OUTPUT_LIMIT);
+      }
+    }
+    default:
+      throw new Error(`Tool tidak dikenal: ${name}`);
+  }
+}
+
+ipcMain.handle('lmstudio:agent', async (event, payload) => {
+  const { requestId, model, messages, options, baseUrl, workspaceRoot } = payload;
+  if (!requestId || !model) throw new Error('requestId dan model wajib diisi.');
+
+  const root = workspaceRoot || process.cwd();
+  const controller = new AbortController();
+  activeRequests.set(requestId, controller);
+  const convo = [...messages];
+
+  try {
+    for (let step = 0; step < AGENT_MAX_STEPS; step += 1) {
+      const { content, toolCalls } = await streamCompletion({
+        event,
+        requestId,
+        baseUrl,
+        model,
+        messages: convo,
+        options,
+        tools: AGENT_TOOLS,
+        signal: controller.signal
+      });
+
+      const assistantMessage = { role: 'assistant', content: content || '' };
+      if (toolCalls.length) {
+        assistantMessage.tool_calls = toolCalls.map((call, index) => ({
+          id: call.id || `call_${step}_${index}`,
+          type: 'function',
+          function: { name: call.name, arguments: call.arguments || '{}' }
+        }));
+      }
+      convo.push(assistantMessage);
+
+      if (!toolCalls.length) break;
+
+      for (let index = 0; index < toolCalls.length; index += 1) {
+        const call = toolCalls[index];
+        const callId = assistantMessage.tool_calls[index].id;
+        const args = safeParseArgs(call.arguments);
+        event.sender.send('lmstudio:agent-tool', {
+          requestId, phase: 'call', id: callId, name: call.name, arguments: args
+        });
+
+        let result;
+        try {
+          result = await runAgentTool(call.name, args, root);
+        } catch (error) {
+          result = `ERROR: ${error.message}`;
+        }
+
+        event.sender.send('lmstudio:agent-tool', {
+          requestId, phase: 'result', id: callId, name: call.name, result
+        });
+        convo.push({ role: 'tool', tool_call_id: callId, content: String(result).slice(0, TOOL_OUTPUT_LIMIT) });
       }
     }
 

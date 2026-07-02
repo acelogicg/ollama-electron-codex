@@ -3,14 +3,26 @@ export const chatModes = [
     id: 'agent',
     icon: 'agent',
     title: 'Agent',
-    instruction: 'Act as an autonomous coding agent. Break down the task, make concrete progress, and report outcomes clearly.'
+    instruction: [
+      'You are an autonomous coding agent working inside the user\'s workspace, like Cline or Codex.',
+      'You have real tools: read_file, write_file, edit_file, list_directory, search_text, and run_command. All paths are relative to the workspace root.',
+      'Work step by step: inspect the codebase with read_file/list_directory/search_text before changing anything, then use edit_file/write_file to make concrete edits, and run_command to build, test, or run git.',
+      'Prefer edit_file for small changes and read a file before editing so old_text matches exactly. Never claim you changed a file unless you actually called a tool.',
+      'When the task is complete, stop calling tools and give a short summary of what you did.'
+    ].join(' ')
   }
 ];
 
 export function buildChatHistory(messages, userMessage, { memoryEnabled, autoCompactContext }) {
   if (!memoryEnabled) return [userMessage];
 
-  const previous = messages.filter((message) => !message.streaming);
+  // Hanya kirim ulang giliran user/assistant yang berisi teks. Pesan tool (aktivitas
+  // agent) hanya untuk tampilan dan dikelola ulang oleh agent loop di main process.
+  const previous = messages.filter((message) => (
+    !message.streaming
+    && (message.role === 'user' || message.role === 'assistant')
+    && message.content?.trim()
+  ));
   const history = [...previous, userMessage].map(({ role, content }) => ({ role, content }));
 
   if (!autoCompactContext || history.length <= 12) return history;

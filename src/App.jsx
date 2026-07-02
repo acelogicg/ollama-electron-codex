@@ -8,17 +8,6 @@ import WebGLBackground from './WebGLBackground.jsx';
 
 const initialMessages = [];
 
-function updateStreamingMessage(setMessages, updater) {
-  setMessages((current) => {
-    const next = [...current];
-    const last = next[next.length - 1];
-    if (last?.role === 'assistant' && last.streaming) {
-      next[next.length - 1] = updater(last);
-    }
-    return next;
-  });
-}
-
 export default function App() {
   const [models, setModels] = useState([]);
   const [model, setModel] = useState(localStorage.getItem('lmstudio-model') || '');
@@ -142,19 +131,47 @@ export default function App() {
       const thinking = data.message?.thinking || '';
       if (!text && !thinking) return;
 
-      updateStreamingMessage(setMessages, (last) => ({
-        ...last,
-        content: last.content + text,
-        thinking: (last.thinking || '') + thinking,
-        thinkingActive: Boolean(thinking && !text)
-      }));
+      setMessages((current) => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant' && last.streaming) {
+          next[next.length - 1] = {
+            ...last,
+            content: last.content + text,
+            thinking: (last.thinking || '') + thinking,
+            thinkingActive: Boolean(thinking && !text)
+          };
+        } else {
+          // Setelah tool dijalankan, mulai bubble asisten baru untuk langkah berikutnya.
+          next.push({ role: 'assistant', content: text, thinking, thinkingActive: Boolean(thinking && !text), streaming: true });
+        }
+        return next;
+      });
+    });
+
+    const offTool = window.lmstudio.onTool(({ requestId: id, phase, id: toolId, name, arguments: args, result }) => {
+      if (id !== requestId) return;
+      if (phase === 'call') {
+        setMessages((current) => {
+          const finalized = current
+            .map((message) => (message.streaming ? { ...message, streaming: false } : message))
+            .filter((message) => !(message.role === 'assistant' && !message.content?.trim()));
+          return [...finalized, { role: 'tool', toolId, name, args, status: 'running' }];
+        });
+      } else if (phase === 'result') {
+        setMessages((current) => current.map((message) => (
+          message.role === 'tool' && message.toolId === toolId
+            ? { ...message, result, status: 'done' }
+            : message
+        )));
+      }
     });
 
     const offDone = window.lmstudio.onDone(({ requestId: id }) => {
       if (id !== requestId) return;
-      setMessages((current) => current.map((message) => (
-        message.streaming ? { ...message, streaming: false } : message
-      )));
+      setMessages((current) => current
+        .map((message) => (message.streaming ? { ...message, streaming: false } : message))
+        .filter((message) => !(message.role === 'assistant' && !message.content?.trim())));
       setGenerating(false);
       setRequestId(null);
       setStatus('Siap');
@@ -170,7 +187,7 @@ export default function App() {
       setStatus('Error');
     });
 
-    return () => { offChunk(); offDone(); offError(); };
+    return () => { offChunk(); offTool(); offDone(); offError(); };
   }, [requestId]);
 
   useEffect(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
@@ -186,11 +203,18 @@ export default function App() {
 
     setInput('');
     setGenerating(true);
-    setStatus('Menjawab...');
+    setStatus('Agent bekerja...');
     setMessages((current) => [...current, userMessage, { role: 'assistant', content: '', streaming: true }]);
 
     setRequestId(id);
-    await window.lmstudio.chat({ requestId: id, model, messages: history, options: { temperature: 0.7 }, baseUrl });
+    await window.lmstudio.agentRun({
+      requestId: id,
+      model,
+      messages: history,
+      options: { temperature: 0.7 },
+      baseUrl,
+      workspaceRoot: workspaceRepo?.root || workspaceDir || ''
+    });
   };
 
   const cancelActiveRequest = async () => {

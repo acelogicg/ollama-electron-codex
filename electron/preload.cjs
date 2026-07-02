@@ -4,7 +4,13 @@ contextBridge.exposeInMainWorld('lmstudio', {
   listModels: (baseUrl) => ipcRenderer.invoke('lmstudio:list-models', baseUrl),
   preloadModel: (model, baseUrl) => ipcRenderer.invoke('lmstudio:preload-model', { model, baseUrl }),
   chat: (payload) => ipcRenderer.invoke('lmstudio:chat', payload),
+  agentRun: (payload) => ipcRenderer.invoke('lmstudio:agent', payload),
   cancel: (requestId) => ipcRenderer.invoke('lmstudio:cancel', requestId),
+  onTool: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('lmstudio:agent-tool', listener);
+    return () => ipcRenderer.removeListener('lmstudio:agent-tool', listener);
+  },
   onChunk: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('lmstudio:chat-chunk', listener);

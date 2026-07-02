@@ -1,22 +1,36 @@
 import MessageContent from './MessageContent.jsx';
+import ToolMessage from './ToolMessage.jsx';
 
 export default function MessageList({ messages, bottomRef }) {
   return (
     <section className="messages">
       {messages.map((message, index) => (
-        <article key={index} className={`message-row ${message.role} ${message.thinkingActive ? 'thinking' : ''}`}>
-          <div className="bubble">
-            <div className="content">
-              <MessageContent
-                role={message.role}
-                content={message.content}
-                streaming={message.streaming}
-                thinking={message.thinking || ''}
-                thinkingActive={message.thinkingActive}
+        message.role === 'tool'
+          ? (
+            <article key={index} className="message-row tool">
+              <ToolMessage
+                name={message.name}
+                args={message.args}
+                result={message.result}
+                status={message.status}
               />
-            </div>
-          </div>
-        </article>
+            </article>
+          )
+          : (
+            <article key={index} className={`message-row ${message.role} ${message.thinkingActive ? 'thinking' : ''}`}>
+              <div className="bubble">
+                <div className="content">
+                  <MessageContent
+                    role={message.role}
+                    content={message.content}
+                    streaming={message.streaming}
+                    thinking={message.thinking || ''}
+                    thinkingActive={message.thinkingActive}
+                  />
+                </div>
+              </div>
+            </article>
+          )
       ))}
       <div ref={bottomRef} />
     </section>
