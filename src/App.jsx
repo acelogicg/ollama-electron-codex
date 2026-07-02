@@ -208,8 +208,16 @@ export default function App() {
       if (phase === 'call') {
         setMessages((current) => {
           const finalized = current
-            .map((message) => (message.streaming ? { ...message, streaming: false } : message))
-            .filter((message) => !(message.role === 'assistant' && !message.content?.trim()));
+            .map((message) => (
+              message.streaming
+                ? { ...message, streaming: false, thinkingActive: false, intermediate: true }
+                : message
+            ))
+            .filter((message) => !(
+              message.role === 'assistant'
+              && !message.content?.trim()
+              && !message.thinking?.trim()
+            ));
           return [...finalized, { role: 'tool', toolId, name, args, status: 'running' }];
         });
       } else if (phase === 'result') {
@@ -225,8 +233,16 @@ export default function App() {
       if (id !== requestId) return;
       setMessages((current) => {
         const cleaned = current
-          .map((message) => (message.streaming ? { ...message, streaming: false } : message))
-          .filter((message) => !(message.role === 'assistant' && !message.content?.trim()));
+          .map((message) => (
+            message.streaming
+              ? { ...message, streaming: false, thinkingActive: false, intermediate: false }
+              : message
+          ))
+          .filter((message) => !(
+            message.role === 'assistant'
+            && !message.content?.trim()
+            && !message.thinking?.trim()
+          ));
         if (stats) {
           for (let i = cleaned.length - 1; i >= 0; i -= 1) {
             if (cleaned[i].role === 'assistant') {

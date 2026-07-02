@@ -18,7 +18,7 @@ export default function MessageList({ messages, bottomRef }) {
             </article>
           )
           : (
-            <article key={index} className={`message-row ${message.role} ${message.thinkingActive ? 'thinking' : ''}`}>
+            <article key={index} className={`message-row ${message.role}`}>
               <div className="bubble">
                 <div className="content">
                   <MessageContent
@@ -27,6 +27,7 @@ export default function MessageList({ messages, bottomRef }) {
                     streaming={message.streaming}
                     thinking={message.thinking || ''}
                     thinkingActive={message.thinkingActive}
+                    intermediate={message.intermediate}
                   />
                 </div>
                 {message.role === 'assistant' && !message.streaming && message.stats

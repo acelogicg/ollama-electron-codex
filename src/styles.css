@@ -317,14 +317,6 @@ select {
 .message-stats .stat.time { color: #8b95a3; }
 .message-stats .stat.steps { color: #7f8a98; }
 
-.message-row.thinking .bubble {
-  width: fit-content;
-  max-width: min(240px, 74vw);
-  border-color: rgba(140, 199, 255, .22);
-  background: rgba(18, 25, 35, .94);
-  padding: 6px 8px 7px;
-}
-
 .content {
   white-space: pre-wrap;
   word-break: break-word;
@@ -424,6 +416,70 @@ select {
   width: 3px;
   height: 3px;
   background: #8cc7ff;
+}
+
+.response-overview {
+  min-width: min(460px, 70vw);
+  margin: 0;
+  color: #9aa8b8;
+}
+
+.response-overview + .text-fragment,
+.response-overview + .code-block {
+  display: block;
+  margin-top: 8px;
+}
+
+.response-overview summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #8cc7ff;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.response-overview summary::-webkit-details-marker { display: none; }
+.response-overview summary::before {
+  content: "›";
+  color: #71849a;
+  transition: transform .15s ease;
+}
+.response-overview[open] summary::before { transform: rotate(90deg); }
+.response-overview summary .typing { gap: 2px; padding: 0; }
+.response-overview summary .typing b {
+  width: 3px;
+  height: 3px;
+  background: #8cc7ff;
+}
+
+.overview-body {
+  margin-top: 7px;
+  padding: 7px 9px;
+  border-left: 2px solid rgba(140, 199, 255, .22);
+  background: rgba(9, 14, 21, .38);
+}
+
+.overview-section + .overview-section { margin-top: 8px; }
+.overview-label {
+  display: block;
+  margin-bottom: 3px;
+  color: #71849a;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.overview-text {
+  max-height: 240px;
+  overflow-y: auto;
+  color: #9aa8b8;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
 }
 
 .message-tips {
