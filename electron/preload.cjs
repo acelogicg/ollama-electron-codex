@@ -1,24 +1,24 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('ollama', {
-  listModels: () => ipcRenderer.invoke('ollama:list-models'),
-  preloadModel: (model) => ipcRenderer.invoke('ollama:preload-model', model),
-  chat: (payload) => ipcRenderer.invoke('ollama:chat', payload),
-  cancel: (requestId) => ipcRenderer.invoke('ollama:cancel', requestId),
+contextBridge.exposeInMainWorld('lmstudio', {
+  listModels: (baseUrl) => ipcRenderer.invoke('lmstudio:list-models', baseUrl),
+  preloadModel: (model, baseUrl) => ipcRenderer.invoke('lmstudio:preload-model', { model, baseUrl }),
+  chat: (payload) => ipcRenderer.invoke('lmstudio:chat', payload),
+  cancel: (requestId) => ipcRenderer.invoke('lmstudio:cancel', requestId),
   onChunk: (callback) => {
     const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('ollama:chat-chunk', listener);
-    return () => ipcRenderer.removeListener('ollama:chat-chunk', listener);
+    ipcRenderer.on('lmstudio:chat-chunk', listener);
+    return () => ipcRenderer.removeListener('lmstudio:chat-chunk', listener);
   },
   onDone: (callback) => {
     const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('ollama:chat-done', listener);
-    return () => ipcRenderer.removeListener('ollama:chat-done', listener);
+    ipcRenderer.on('lmstudio:chat-done', listener);
+    return () => ipcRenderer.removeListener('lmstudio:chat-done', listener);
   },
   onError: (callback) => {
     const listener = (_event, payload) => callback(payload);
-    ipcRenderer.on('ollama:chat-error', listener);
-    return () => ipcRenderer.removeListener('ollama:chat-error', listener);
+    ipcRenderer.on('lmstudio:chat-error', listener);
+    return () => ipcRenderer.removeListener('lmstudio:chat-error', listener);
   }
 });
 

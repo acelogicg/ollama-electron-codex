@@ -21,7 +21,7 @@ function updateStreamingMessage(setMessages, updater) {
 
 export default function App() {
   const [models, setModels] = useState([]);
-  const [model, setModel] = useState(localStorage.getItem('ollama-model') || '');
+  const [model, setModel] = useState(localStorage.getItem('lmstudio-model') || '');
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('Menghubungkan...');
@@ -38,46 +38,27 @@ export default function App() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [requestId, setRequestId] = useState(null);
-  const [engineProvider, setEngineProvider] = useState(localStorage.getItem('engine-provider') || 'ollama');
-  const [browserModels, setBrowserModels] = useState([]);
-  const [browserModel, setBrowserModel] = useState(localStorage.getItem('browser-model') || '');
-  const [browserSupported, setBrowserSupported] = useState(false);
-  const [browserInitializing, setBrowserInitializing] = useState(false);
-  const [browserProgress, setBrowserProgress] = useState(null);
-  const [browserGpuVendor, setBrowserGpuVendor] = useState('');
-  const [browserRuntimeStats, setBrowserRuntimeStats] = useState('');
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem('lmstudio-base-url') || 'http://127.0.0.1:1234');
   const bottomRef = useRef(null);
-  const browserWorkerRef = useRef(null);
-  const browserEngineRef = useRef(null);
-  const browserLoadedModelRef = useRef('');
-  const browserAbortRef = useRef(false);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
   const selectedRepo = useMemo(() => (
     githubRepos.find((repo) => repo.nameWithOwner === githubRepoName) || null
   ), [githubRepos, githubRepoName]);
 
-  const activeModels = engineProvider === 'browser' ? browserModels : models;
-  const activeModelValue = engineProvider === 'browser' ? browserModel : model;
-  const activeSelectedModel = useMemo(() => (
-    activeModels.find((item) => item.name === activeModelValue) || null
-  ), [activeModels, activeModelValue]);
-  const canUseBrowserProvider = browserSupported && browserModels.length > 0;
-  const activeModelReady = engineProvider === 'browser'
-    ? Boolean(browserModel && canUseBrowserProvider)
-    : Boolean(model);
+  const activeModelReady = Boolean(model);
 
   const loadModels = async () => {
     setLoadingModels(true);
-    setStatus('Memuat model Ollama...');
+    setStatus('Memuat model LM Studio...');
     try {
-      const list = await window.ollama.listModels();
+      const list = await window.lmstudio.listModels(baseUrl);
       setModels(list);
       const preferred = list.some((item) => item.name === model) ? model : list[0]?.name || '';
       setModel(preferred);
-      setStatus(list.length ? 'Siap' : 'Model Ollama tidak ditemukan');
+      setStatus(list.length ? 'Siap' : 'Model LM Studio tidak ditemukan');
     } catch (error) {
-      setStatus(`Ollama offline: ${error.message}`);
+      setStatus(`LM Studio offline: ${error.message}`);
     } finally {
       setLoadingModels(false);
     }
@@ -112,96 +93,12 @@ export default function App() {
     }
   };
 
-  const ensureBrowserEngine = () => {
-    const engine = browserEngineRef.current;
-    if (!engine) throw new Error('Engine browser belum siap.');
-    if (!browserSupported) throw new Error('WebGPU tidak tersedia di renderer Electron ini.');
-    return engine;
-  };
-
-  const loadBrowserDiagnostics = async (engine, selectedModel = browserModel) => {
-    const [vendor, stats] = await Promise.all([
-      engine.getGPUVendor().catch(() => ''),
-      engine.runtimeStatsText(selectedModel).catch(() => '')
-    ]);
-    setBrowserGpuVendor(vendor || '');
-    setBrowserRuntimeStats(stats || '');
-  };
-
-  const ensureBrowserModelLoaded = async (forceReload = false) => {
-    const engine = ensureBrowserEngine();
-    if (!browserModel) throw new Error('Model browser belum dipilih.');
-    if (!forceReload && browserLoadedModelRef.current === browserModel) return engine;
-
-    setBrowserInitializing(true);
-    setBrowserProgress({ progress: 0, text: `Menyiapkan ${browserModel}`, timeElapsed: 0 });
-    setStatus(`Memuat model browser: ${browserModel}`);
-
-    try {
-      await engine.reload(browserModel);
-      browserLoadedModelRef.current = browserModel;
-      await loadBrowserDiagnostics(engine, browserModel);
-      setStatus('Siap');
-      return engine;
-    } finally {
-      setBrowserInitializing(false);
-    }
-  };
-
   const reloadActiveModels = async () => {
-    if (engineProvider === 'browser') {
-      try {
-        await ensureBrowserModelLoaded(true);
-      } catch (error) {
-        setStatus(`Browser error: ${error.message}`);
-      }
-      return;
-    }
-
     await loadModels();
   };
 
   useEffect(() => { loadModels(); }, []);
   useEffect(() => { loadGitHubRepos(); }, []);
-
-  useEffect(() => {
-    const supported = typeof navigator !== 'undefined' && 'gpu' in navigator;
-    setBrowserSupported(supported);
-
-    if (!supported || typeof Worker === 'undefined') {
-      if (localStorage.getItem('engine-provider') === 'browser') setEngineProvider('ollama');
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    import('./browserProvider.js')
-      .then(({ createBrowserEngine, browserModelOptions, defaultBrowserModel }) => {
-        if (cancelled) return;
-
-        setBrowserModels(browserModelOptions);
-        setBrowserModel((current) => current || defaultBrowserModel);
-
-        const { worker, engine } = createBrowserEngine((report) => setBrowserProgress(report));
-        browserWorkerRef.current = worker;
-        browserEngineRef.current = engine;
-      })
-      .catch(() => {
-        setBrowserSupported(false);
-        if (localStorage.getItem('engine-provider') === 'browser') setEngineProvider('ollama');
-      });
-
-    return () => {
-      cancelled = true;
-      const activeEngine = browserEngineRef.current;
-      const activeWorker = browserWorkerRef.current;
-      browserEngineRef.current = null;
-      browserLoadedModelRef.current = '';
-      browserWorkerRef.current = null;
-      Promise.resolve(activeEngine?.unload?.()).catch(() => {});
-      activeWorker?.terminate();
-    };
-  }, []);
 
   useEffect(() => {
     localStorage.setItem('chat-mode', mode);
@@ -226,30 +123,20 @@ export default function App() {
   }, [workspaceDir]);
 
   useEffect(() => {
-    localStorage.setItem('engine-provider', engineProvider);
-  }, [engineProvider]);
+    localStorage.setItem('lmstudio-base-url', baseUrl);
+  }, [baseUrl]);
 
   useEffect(() => {
-    if (browserModel) localStorage.setItem('browser-model', browserModel);
-  }, [browserModel]);
-
-  useEffect(() => {
-    if (engineProvider === 'browser' && !canUseBrowserProvider) {
-      setStatus('WebGPU browser inference tidak tersedia di perangkat ini.');
-    }
-  }, [engineProvider, canUseBrowserProvider]);
-
-  useEffect(() => {
-    if (engineProvider !== 'ollama' || !model) return;
-    localStorage.setItem('ollama-model', model);
-    setStatus('Memuat model Ollama...');
-    window.ollama.preloadModel(model)
+    if (!model) return;
+    localStorage.setItem('lmstudio-model', model);
+    setStatus('Memuat model LM Studio...');
+    window.lmstudio.preloadModel(model, baseUrl)
       .then(() => setStatus('Siap'))
       .catch((error) => setStatus(`Gagal: ${error.message}`));
-  }, [engineProvider, model]);
+  }, [model, baseUrl]);
 
   useEffect(() => {
-    const offChunk = window.ollama.onChunk(({ requestId: id, data }) => {
+    const offChunk = window.lmstudio.onChunk(({ requestId: id, data }) => {
       if (id !== requestId) return;
       const text = data.message?.content || '';
       const thinking = data.message?.thinking || '';
@@ -263,7 +150,7 @@ export default function App() {
       }));
     });
 
-    const offDone = window.ollama.onDone(({ requestId: id }) => {
+    const offDone = window.lmstudio.onDone(({ requestId: id }) => {
       if (id !== requestId) return;
       setMessages((current) => current.map((message) => (
         message.streaming ? { ...message, streaming: false } : message
@@ -273,7 +160,7 @@ export default function App() {
       setStatus('Siap');
     });
 
-    const offError = window.ollama.onError(({ requestId: id, message }) => {
+    const offError = window.lmstudio.onError(({ requestId: id, message }) => {
       if (id !== requestId) return;
       setMessages((current) => current.map((item) => (
         item.streaming ? { ...item, streaming: false, content: `Error: ${message}` } : item
@@ -288,35 +175,6 @@ export default function App() {
 
   useEffect(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
 
-  const sendViaBrowser = async (history) => {
-    const engine = await ensureBrowserModelLoaded();
-    const chunks = await engine.chat.completions.create({
-      model: browserModel,
-      messages: history,
-      stream: true,
-      stream_options: { include_usage: true },
-      temperature: 0.7
-    });
-
-    let finishReason = null;
-
-    for await (const chunk of chunks) {
-      const choice = chunk.choices[0];
-      const text = choice?.delta?.content || '';
-      if (choice?.finish_reason) finishReason = choice.finish_reason;
-
-      if (text) {
-        updateStreamingMessage(setMessages, (last) => ({
-          ...last,
-          content: last.content + text
-        }));
-      }
-    }
-
-    await loadBrowserDiagnostics(engine, browserModel);
-    return finishReason;
-  };
-
   const send = async () => {
     const content = input.trim();
     if (!content || !activeModelReady || generating) return;
@@ -328,45 +186,16 @@ export default function App() {
 
     setInput('');
     setGenerating(true);
-    setStatus(engineProvider === 'browser' ? 'Menjawab via WebGPU...' : 'Menjawab...');
+    setStatus('Menjawab...');
     setMessages((current) => [...current, userMessage, { role: 'assistant', content: '', streaming: true }]);
 
-    if (engineProvider === 'browser') {
-      browserAbortRef.current = false;
-      try {
-        const finishReason = await sendViaBrowser(history);
-        const aborted = browserAbortRef.current || finishReason === 'abort';
-        setMessages((current) => current.map((message) => (
-          message.streaming ? { ...message, streaming: false } : message
-        )));
-        setStatus(aborted ? 'Dihentikan' : 'Siap');
-      } catch (error) {
-        setMessages((current) => current.map((item) => (
-          item.streaming ? { ...item, streaming: false, content: `Error: ${error.message}` } : item
-        )));
-        setStatus(`Browser error: ${error.message}`);
-      } finally {
-        setGenerating(false);
-      }
-      return;
-    }
-
     setRequestId(id);
-    await window.ollama.chat({ requestId: id, model, messages: history, think: 'auto', options: { temperature: 0.7 } });
+    await window.lmstudio.chat({ requestId: id, model, messages: history, options: { temperature: 0.7 }, baseUrl });
   };
 
   const cancelActiveRequest = async () => {
-    if (engineProvider === 'browser') {
-      const engine = browserEngineRef.current;
-      if (!engine || !generating) return false;
-      browserAbortRef.current = true;
-      engine.interruptGenerate();
-      setStatus('Menghentikan WebGPU...');
-      return true;
-    }
-
     if (!requestId) return false;
-    await window.ollama.cancel(requestId);
+    await window.lmstudio.cancel(requestId);
     setMessages((current) => current.map((message) => (
       message.streaming ? { ...message, streaming: false } : message
     )));
@@ -411,26 +240,13 @@ export default function App() {
     }
   };
 
-  const handleProviderChange = (nextProvider) => {
-    if (nextProvider === 'browser' && !canUseBrowserProvider) {
-      setStatus('WebGPU tidak tersedia, tetap memakai Ollama.');
-      return;
-    }
-
-    setEngineProvider(nextProvider);
-    setStatus(nextProvider === 'browser' ? 'Mode browser inference aktif.' : 'Mode Ollama aktif.');
+  const handleBaseUrlChange = (nextValue) => {
+    setBaseUrl(nextValue);
   };
 
-  const handleActiveModelChange = (nextValue) => {
-    if (engineProvider === 'browser') {
-      setBrowserModel(nextValue);
-      browserLoadedModelRef.current = '';
-      setBrowserRuntimeStats('');
-      setBrowserGpuVendor('');
-      return;
-    }
-
-    setModel(nextValue);
+  const applyBaseUrl = async () => {
+    setStatus('Menghubungkan ke LM Studio...');
+    await loadModels();
   };
 
   return (
@@ -438,10 +254,9 @@ export default function App() {
       <WebGLBackground />
       <main className="chat-panel">
         <Topbar
-          engineProvider={engineProvider}
-          model={activeModelValue}
-          models={activeModels}
-          selected={activeSelectedModel}
+          model={model}
+          models={models}
+          selected={selected}
           status={status}
           view={view}
           mode={mode}
@@ -449,9 +264,9 @@ export default function App() {
           githubRepos={githubRepos}
           selectedRepo={selectedRepo}
           loadingRepos={loadingRepos}
-          loadingModels={loadingModels || browserInitializing}
+          loadingModels={loadingModels}
           generating={generating}
-          onModelChange={handleActiveModelChange}
+          onModelChange={setModel}
           onModeChange={setMode}
           onRepoChange={setGithubRepoName}
           onChooseWorkspace={chooseWorkspaceDirectory}
@@ -466,18 +281,16 @@ export default function App() {
             <SettingsPage
               memoryEnabled={memoryEnabled}
               autoCompactContext={autoCompactContext}
-              engineProvider={engineProvider}
-              browserSupported={browserSupported}
-              browserInitializing={browserInitializing}
-              browserProgress={browserProgress}
-              browserGpuVendor={browserGpuVendor}
-              browserRuntimeStats={browserRuntimeStats}
-              browserModel={browserModel}
-              browserModels={browserModels}
+              baseUrl={baseUrl}
+              models={models}
+              model={model}
+              loadingModels={loadingModels}
+              onBaseUrlChange={handleBaseUrlChange}
+              onApplyBaseUrl={applyBaseUrl}
+              onRefreshModels={reloadActiveModels}
+              onModelChange={setModel}
               onMemoryChange={setMemoryEnabled}
               onAutoCompactChange={setAutoCompactContext}
-              onEngineProviderChange={handleProviderChange}
-              onBrowserModelChange={setBrowserModel}
             />
           )
           : (
@@ -485,7 +298,7 @@ export default function App() {
               <MessageList messages={messages} bottomRef={bottomRef} />
               <Composer
                 input={input}
-                model={activeModelReady ? activeModelValue : ''}
+                model={activeModelReady ? model : ''}
                 generating={generating}
                 onInputChange={setInput}
                 onKeyDown={onKeyDown}

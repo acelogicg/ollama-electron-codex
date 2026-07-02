@@ -1,7 +1,6 @@
 import Icon from './Icon.jsx';
 
 export default function Topbar({
-  engineProvider,
   model,
   models,
   selected,
@@ -29,11 +28,11 @@ export default function Topbar({
   return (
     <header className="topbar">
       <div className="title-group">
-        <span className="app-mark" title={engineProvider === 'browser' ? 'Browser WebGPU' : 'Ollama'}>
+        <span className="app-mark" title="LM Studio">
           <Icon name="app" />
         </span>
         <span className={`status-dot ${model ? 'online' : ''}`} title={status} />
-        <span className="engine-label">{engineProvider === 'browser' ? 'WebGPU' : 'Ollama'}</span>
+        <span className="engine-label">LM Studio</span>
       </div>
 
       <div className="toolbar">
@@ -80,7 +79,7 @@ export default function Topbar({
           {!models.length && <option value="">Tidak ada model</option>}
           {models.map((item) => <option key={item.name} value={item.name}>{item.label || item.name}</option>)}
         </select>}
-        {!showingSettings && <button className="icon-button" onClick={onReloadModels} title={engineProvider === 'browser' ? 'Muat ulang model browser' : 'Muat ulang model'} aria-label={engineProvider === 'browser' ? 'Muat ulang model browser' : 'Muat ulang model'}>
+        {!showingSettings && <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">
           <Icon name="refresh" />
         </button>}
         {!showingSettings && <button className="icon-button" onClick={onNewChat} title="Percakapan baru" aria-label="Percakapan baru">

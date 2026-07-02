@@ -353,6 +353,50 @@ textarea::placeholder { color: #6d7480; }
   font-size: 11px;
   line-height: 1.35;
 }
+.settings-row p code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .08);
+  font-size: 10.5px;
+}
+
+.settings-inline {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.settings-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;
+  background: rgba(12, 15, 21, .7);
+  color: #e6e9ee;
+  font-size: 12px;
+  font-family: inherit;
+}
+.settings-input:focus {
+  outline: none;
+  border-color: rgba(120, 170, 255, .6);
+}
+.settings-button {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .06);
+  color: #e6e9ee;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .12);
+}
+.settings-button:disabled {
+  opacity: .45;
+  cursor: default;
+}
 
 .toggle {
   position: relative;

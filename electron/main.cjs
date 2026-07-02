@@ -4,7 +4,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { promisify } = require('util');
 
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+const LMSTUDIO_URL = process.env.LMSTUDIO_URL || 'http://127.0.0.1:1234';
 const activeRequests = new Map();
 const execFileAsync = promisify(execFile);
 const MAX_CONTEXT_FILES = 10;
@@ -67,18 +67,18 @@ function createWindow() {
   }
 }
 
-async function ollamaFetch(route, options = {}) {
-  const response = await fetch(`${OLLAMA_URL}${route}`, options);
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Ollama HTTP ${response.status}`);
-  }
-  return response;
+function resolveBaseUrl(baseUrl) {
+  const url = (typeof baseUrl === 'string' && baseUrl.trim()) || LMSTUDIO_URL;
+  return url.replace(/\/+$/, '');
 }
 
-function isThinkingUnsupported(error) {
-  const message = String(error?.message || '').toLowerCase();
-  return message.includes('think') || message.includes('thinking');
+async function lmstudioFetch(baseUrl, route, options = {}) {
+  const response = await fetch(`${resolveBaseUrl(baseUrl)}${route}`, options);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `LM Studio HTTP ${response.status}`);
+  }
+  return response;
 }
 
 function parseRemoteRepo(remote) {
@@ -218,10 +218,10 @@ async function listGitHubRepos(cwd = process.cwd()) {
   }
 }
 
-ipcMain.handle('ollama:list-models', async () => {
-  const response = await ollamaFetch('/api/tags');
+ipcMain.handle('lmstudio:list-models', async (_event, baseUrl) => {
+  const response = await lmstudioFetch(baseUrl, '/v1/models');
   const data = await response.json();
-  return data.models || [];
+  return (data.data || []).map((item) => ({ name: item.id, label: item.id }));
 });
 
 ipcMain.handle('github:list-repos', async (_event, cwd) => listGitHubRepos(cwd || process.cwd()));
@@ -249,36 +249,51 @@ ipcMain.handle('git:log', async (_event, cwd) => {
   return repo?.root ? execGit(['log', '-20', '--pretty=format:%h %s'], repo.root) : '';
 });
 
-ipcMain.handle('ollama:preload-model', async (_event, model) => {
+ipcMain.handle('lmstudio:preload-model', async (_event, { model, baseUrl } = {}) => {
   if (!model) throw new Error('Model belum dipilih.');
-  const response = await ollamaFetch('/api/generate', {
+  // LM Studio memuat model secara JIT saat request pertama. Kirim prompt minimal
+  // agar model sudah panas sebelum chat sungguhan.
+  const response = await lmstudioFetch(baseUrl, '/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt: '', stream: false, keep_alive: '30m' })
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: 'ping' }],
+      max_tokens: 1,
+      stream: false
+    })
   });
   await response.json();
   return { ok: true };
 });
 
-ipcMain.handle('ollama:chat', async (event, payload) => {
-  const { requestId, model, messages, options, think } = payload;
+function emitDelta(event, requestId, delta) {
+  const content = delta?.content || '';
+  const thinking = delta?.reasoning_content || delta?.reasoning || '';
+  if (!content && !thinking) return;
+  event.sender.send('lmstudio:chat-chunk', {
+    requestId,
+    data: { message: { content, thinking } }
+  });
+}
+
+ipcMain.handle('lmstudio:chat', async (event, payload) => {
+  const { requestId, model, messages, options, baseUrl } = payload;
   if (!requestId || !model) throw new Error('requestId dan model wajib diisi.');
 
   const controller = new AbortController();
   activeRequests.set(requestId, controller);
 
-  const streamChat = async (thinkValue) => {
+  try {
     const body = {
       model,
       messages,
       stream: true,
-      keep_alive: '30m',
-      options: options || { temperature: 0.7 }
+      temperature: options?.temperature ?? 0.7,
+      ...(options || {})
     };
 
-    if (thinkValue !== undefined) body.think = thinkValue;
-
-    const response = await ollamaFetch('/api/chat', {
+    const response = await lmstudioFetch(baseUrl, '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -297,40 +312,22 @@ ipcMain.handle('ollama:chat', async (event, payload) => {
       buffer = lines.pop() || '';
 
       for (const line of lines) {
-        if (!line.trim()) continue;
-        const json = JSON.parse(line);
-        event.sender.send('ollama:chat-chunk', { requestId, data: json });
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) continue;
+        const payloadText = trimmed.slice(5).trim();
+        if (payloadText === '[DONE]') continue;
+        const json = JSON.parse(payloadText);
+        emitDelta(event, requestId, json.choices?.[0]?.delta);
       }
     }
 
-    if (buffer.trim()) {
-      const json = JSON.parse(buffer);
-      event.sender.send('ollama:chat-chunk', { requestId, data: json });
-    }
-
-    event.sender.send('ollama:chat-done', { requestId });
-  };
-
-  try {
-    const autoThink = model.toLowerCase().includes('gpt-oss') ? 'medium' : true;
-    const thinkValue = think === 'auto' ? autoThink : think;
-
-    try {
-      await streamChat(thinkValue);
-    } catch (error) {
-      if (think === 'auto' && error.name !== 'AbortError' && isThinkingUnsupported(error)) {
-        await streamChat(undefined);
-      } else {
-        throw error;
-      }
-    }
-
+    event.sender.send('lmstudio:chat-done', { requestId });
     return { ok: true };
   } catch (error) {
     if (error.name !== 'AbortError') {
-      event.sender.send('ollama:chat-error', {
+      event.sender.send('lmstudio:chat-error', {
         requestId,
-        message: error.message || 'Gagal menghubungi Ollama.'
+        message: error.message || 'Gagal menghubungi LM Studio.'
       });
     }
     return { ok: false };
@@ -339,7 +336,7 @@ ipcMain.handle('ollama:chat', async (event, payload) => {
   }
 });
 
-ipcMain.handle('ollama:cancel', async (_event, requestId) => {
+ipcMain.handle('lmstudio:cancel', async (_event, requestId) => {
   const controller = activeRequests.get(requestId);
   if (controller) controller.abort();
   return { ok: true };
