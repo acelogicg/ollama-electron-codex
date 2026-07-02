@@ -26,7 +26,7 @@ export default function App() {
   const [input, setInput] = useState('');
   const [status, setStatus] = useState('Menghubungkan...');
   const [view, setView] = useState('chat');
-  const [mode, setMode] = useState(localStorage.getItem('chat-mode') || 'ask');
+  const [mode, setMode] = useState('agent');
   const [memoryEnabled, setMemoryEnabled] = useState(localStorage.getItem('memory-enabled') !== 'false');
   const [autoCompactContext, setAutoCompactContext] = useState(localStorage.getItem('auto-compact-context') !== 'false');
   const [githubRepos, setGithubRepos] = useState([]);

@@ -36,7 +36,7 @@ export default function Topbar({
       </div>
 
       <div className="toolbar">
-        {!showingSettings && (
+        {!showingSettings && modes.length > 1 && (
           <div className="mode-switcher" role="group" aria-label="Mode">
             {modes.map((item) => (
               <button

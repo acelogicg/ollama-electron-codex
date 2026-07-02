@@ -1,27 +1,9 @@
 export const chatModes = [
   {
-    id: 'ask',
-    icon: 'ask',
-    title: 'Ask',
-    instruction: 'Answer directly and concisely. Ask for clarification only when needed.'
-  },
-  {
     id: 'agent',
     icon: 'agent',
     title: 'Agent',
     instruction: 'Act as an autonomous coding agent. Break down the task, make concrete progress, and report outcomes clearly.'
-  },
-  {
-    id: 'skill',
-    icon: 'skill',
-    title: 'Skill',
-    instruction: 'Focus on reusable skills, workflows, patterns, and step-by-step capability building.'
-  },
-  {
-    id: 'plan',
-    icon: 'plan',
-    title: 'Plan',
-    instruction: 'Think in plans first. Provide structured steps, risks, and sequencing before implementation details.'
   }
 ];
 
