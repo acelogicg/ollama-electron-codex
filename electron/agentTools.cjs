@@ -1,10 +1,9 @@
-const { execFile, exec } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
 const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
-const execAsync = promisify(exec);
 const TOOL_OUTPUT_LIMIT = 12000;
 const PROJECT_MANIFESTS = new Set([
   'package.json',
@@ -104,10 +103,18 @@ const AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'run_command',
-      description: 'Jalankan perintah shell di root workspace dan kembalikan stdout/stderr. Wajib panggil inspect_project lebih dulu. Timeout 60 detik.',
+      description: 'Jalankan perintah shell di root workspace dan kembalikan stdout/stderr. Wajib panggil inspect_project lebih dulu. Timeout default 300 detik, maksimum 600 detik.',
       parameters: {
         type: 'object',
-        properties: { command: { type: 'string' } },
+        properties: {
+          command: { type: 'string' },
+          timeout_seconds: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 600,
+            description: 'Timeout command dalam detik. Default 300.'
+          }
+        },
         required: ['command']
       }
     }
@@ -268,7 +275,99 @@ async function inspectProject(root) {
   }, null, 2);
 }
 
-async function runAgentTool(name, args, root) {
+function abortError(message = 'Command dibatalkan.') {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}
+
+async function terminateProcessTree(child) {
+  if (!child?.pid) return;
+  try {
+    if (process.platform === 'win32') {
+      await execFileAsync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    } else {
+      process.kill(-child.pid, 'SIGTERM');
+    }
+  } catch (_error) {
+    child.kill();
+  }
+}
+
+function runShellCommand(command, { cwd, timeout, signal }) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+
+    const child = spawn(command, {
+      cwd,
+      shell: true,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+      env: process.env
+    });
+    let stdout = '';
+    let stderr = '';
+    let aborted = false;
+    let timedOut = false;
+    let settled = false;
+    const maxBuffer = 4 * 1024 * 1024;
+
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', handleAbort);
+      callback();
+    };
+    const handleAbort = () => {
+      aborted = true;
+      terminateProcessTree(child);
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateProcessTree(child);
+    }, timeout);
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+    child.stdout.on('data', (chunk) => {
+      if (stdout.length < maxBuffer) stdout += chunk.toString().slice(0, maxBuffer - stdout.length);
+    });
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < maxBuffer) stderr += chunk.toString().slice(0, maxBuffer - stderr.length);
+    });
+    child.on('error', (error) => finish(() => reject(error)));
+    child.on('close', (code, closeSignal) => {
+      finish(() => {
+        if (aborted || signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        if (timedOut) {
+          const error = new Error(`Command melewati timeout ${Math.round(timeout / 1000)} detik.`);
+          error.code = 'ETIMEDOUT';
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+          return;
+        }
+        if (code === 0) {
+          resolve({ stdout, stderr });
+          return;
+        }
+        const error = new Error(`Command gagal dengan exit code ${code}${closeSignal ? ` (${closeSignal})` : ''}.`);
+        error.code = code;
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      });
+    });
+  });
+}
+
+async function runAgentTool(name, args, root, { signal } = {}) {
   switch (name) {
     case 'read_file': {
       const target = resolveInsideRoot(root, args.path);
@@ -369,16 +468,17 @@ async function runAgentTool(name, args, root) {
       return inspectProject(root);
     case 'run_command': {
       if (!args.command) throw new Error('command wajib diisi.');
+      const timeoutSeconds = Math.min(600, Math.max(1, Number(args.timeout_seconds) || 300));
       try {
-        const { stdout, stderr } = await execAsync(args.command, {
+        const { stdout, stderr } = await runShellCommand(args.command, {
           cwd: root,
-          windowsHide: true,
-          timeout: 60000,
-          maxBuffer: 4 * 1024 * 1024
+          timeout: timeoutSeconds * 1000,
+          signal
         });
         const out = `${stdout || ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
         return (out || '(tidak ada output)').slice(0, TOOL_OUTPUT_LIMIT);
       } catch (error) {
+        if (error.name === 'AbortError' || signal?.aborted) throw error;
         const detail = `${error.stdout || ''}${error.stderr || ''}`.trim();
         return `EXIT ${error.code ?? '?'}: ${error.message}\n${detail}`.slice(0, TOOL_OUTPUT_LIMIT);
       }
@@ -395,5 +495,6 @@ module.exports = {
   resolveInsideRoot,
   findFileSuggestions,
   inspectProject,
+  runShellCommand,
   runAgentTool
 };

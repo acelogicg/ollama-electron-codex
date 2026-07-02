@@ -91,7 +91,7 @@ export default function TerminalPanel({ entries, cwd, onRun, onCancel, onClose, 
                 <button
                   type="button"
                   className="terminal-stop"
-                  onClick={() => onCancel(entry.id)}
+                  onClick={() => onCancel(entry)}
                   title="Hentikan command"
                 >
                   <Icon name="cancel" />

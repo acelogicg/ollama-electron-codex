@@ -8,8 +8,9 @@ const { AGENT_TOOLS, TOOL_OUTPUT_LIMIT, safeParseArgs, runAgentTool } = require(
 const LMSTUDIO_URL = process.env.LMSTUDIO_URL || 'http://127.0.0.1:1234';
 const activeRequests = new Map();
 const activeTerminalProcesses = new Map();
+const cancelledTerminalProcesses = new Set();
 const execFileAsync = promisify(execFile);
-const AGENT_MAX_STEPS = 24;
+const AGENT_MAX_STEPS = 48;
 const MAX_CONTEXT_FILES = 10;
 const MAX_FILE_CHARS = 4000;
 const MAX_TREE_FILES = 160;
@@ -678,7 +679,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
           result = 'ERROR: PREFLIGHT_REQUIRED: panggil inspect_project terlebih dahulu, baca manifest/dependency manager yang terdeteksi, lalu pilih command dan working directory yang sesuai.';
         } else {
           try {
-            result = await runAgentTool(call.name, args, root);
+            result = await runAgentTool(call.name, args, root, { signal: controller.signal });
           } catch (error) {
             result = `ERROR: ${error.message}`;
           }
@@ -804,6 +805,7 @@ ipcMain.handle('terminal:run', async (event, { id, command, cwd } = {}) => {
     cwd: workingDirectory,
     shell: true,
     windowsHide: true,
+    detached: process.platform !== 'win32',
     env: process.env
   });
   activeTerminalProcesses.set(id, child);
@@ -822,7 +824,8 @@ ipcMain.handle('terminal:run', async (event, { id, command, cwd } = {}) => {
   });
   child.on('close', (code, signal) => {
     activeTerminalProcesses.delete(id);
-    send('terminal:done', { id, code, signal });
+    const cancelled = cancelledTerminalProcesses.delete(id);
+    send('terminal:done', { id, code, signal, cancelled });
   });
 
   return { ok: true, pid: child.pid };
@@ -831,7 +834,16 @@ ipcMain.handle('terminal:run', async (event, { id, command, cwd } = {}) => {
 ipcMain.handle('terminal:cancel', async (_event, id) => {
   const child = activeTerminalProcesses.get(id);
   if (!child) return { ok: false };
-  child.kill();
+  cancelledTerminalProcesses.add(id);
+  try {
+    if (process.platform === 'win32') {
+      await execFileAsync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    } else {
+      process.kill(-child.pid, 'SIGTERM');
+    }
+  } catch (_error) {
+    child.kill();
+  }
   return { ok: true };
 });
 

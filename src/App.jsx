@@ -174,12 +174,12 @@ export default function App() {
           : entry
       )));
     });
-    const offDone = window.terminal.onDone(({ id, code, signal }) => {
+    const offDone = window.terminal.onDone(({ id, code, signal, cancelled }) => {
       setTerminalEntries((current) => current.map((entry) => (
         entry.id === id
           ? {
             ...entry,
-            status: signal ? 'cancelled' : (code === 0 ? 'done' : 'error'),
+            status: cancelled || signal ? 'cancelled' : (code === 0 ? 'done' : 'error'),
             exitCode: code
           }
           : entry
@@ -316,7 +316,14 @@ export default function App() {
       if (id !== requestId) return;
       if (name === 'run_command') {
         if (phase === 'call') {
-          setTerminalEntries((current) => [...current, { id: toolId, command: args?.command || '', output: '', status: 'running' }]);
+          setTerminalEntries((current) => [...current, {
+            id: toolId,
+            requestId: id,
+            command: args?.command || '',
+            output: '',
+            status: 'running',
+            source: 'agent'
+          }]);
         } else if (phase === 'result') {
           setTerminalEntries((current) => current.map((entry) => (
             entry.id === toolId
@@ -512,8 +519,15 @@ export default function App() {
     }
   };
 
-  const cancelTerminalCommand = async (id) => {
-    await window.terminal.cancel(id);
+  const cancelTerminalCommand = async (entry) => {
+    if (entry.source === 'agent') {
+      await cancelActiveRequest();
+      setTerminalEntries((current) => current.map((item) => (
+        item.id === entry.id ? { ...item, status: 'cancelled' } : item
+      )));
+      return;
+    }
+    await window.terminal.cancel(entry.id);
   };
 
   return (
