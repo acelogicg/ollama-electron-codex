@@ -1,4 +1,4 @@
-import { getThinkingPreview, highlightCode, splitMessageBlocks } from '../utils/messageFormatting.jsx';
+import { formatDisplayText, getThinkingPreview, highlightCode, splitMessageBlocks } from '../utils/messageFormatting.jsx';
 
 function TypingDots() {
   return <span className="typing"><b /><b /><b /></span>;
@@ -16,7 +16,7 @@ function ThinkingState({ thinking }) {
   );
 }
 
-export default function MessageContent({ content, streaming, thinking, thinkingActive }) {
+export default function MessageContent({ content, streaming, thinking, thinkingActive, role }) {
   if (!content && thinkingActive) return <ThinkingState thinking={thinking} />;
   if (!content) return streaming ? <TypingDots /> : '';
 
@@ -30,6 +30,7 @@ export default function MessageContent({ content, streaming, thinking, thinkingA
       );
     }
 
-    return <span key={index} className="text-fragment">{block.value}</span>;
+    const text = role === 'assistant' ? formatDisplayText(block.value) : block.value;
+    return <span key={index} className="text-fragment">{text}</span>;
   });
 }

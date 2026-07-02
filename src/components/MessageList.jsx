@@ -8,6 +8,7 @@ export default function MessageList({ messages, bottomRef }) {
           <div className="bubble">
             <div className="content">
               <MessageContent
+                role={message.role}
                 content={message.content}
                 streaming={message.streaming}
                 thinking={message.thinking || ''}

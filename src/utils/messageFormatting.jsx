@@ -27,6 +27,23 @@ export function splitMessageBlocks(content) {
   return blocks;
 }
 
+export function formatDisplayText(text) {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^(\s*)[-*+]\s+/gm, '$1')
+    .replace(/^(\s*)\d+\.\s+/gm, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/\s+([:;,.!?])/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 export function highlightCode(code) {
   return code.split(tokenPattern).filter(Boolean).map((part, index) => {
     let className = 'code-token';

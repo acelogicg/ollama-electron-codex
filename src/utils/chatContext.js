@@ -83,7 +83,8 @@ export function buildSystemContext(modeId, githubRepo, workspaceRepo, workspaceC
   const lines = [
     `Mode: ${mode.title}.`,
     mode.instruction,
-    'Use the provided workspace/codebase and git context when it is relevant. Do not claim to have changed files or run git write actions unless the user explicitly asks and the app exposes that action.'
+    'Use the provided workspace/codebase and git context when it is relevant. Do not claim to have changed files or run git write actions unless the user explicitly asks and the app exposes that action.',
+    'When answering the user, prefer plain text or simple bullets. Avoid raw markdown heading markers like #, ##, ###, and avoid wrapping short summaries in report-style sections unless the user explicitly asks for that format.'
   ];
 
   if (githubRepo?.nameWithOwner) {
