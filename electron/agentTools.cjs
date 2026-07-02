@@ -108,11 +108,53 @@ function resolveInsideRoot(root, relPath) {
   return target;
 }
 
+async function findFileSuggestions(root, relPath, limit = 6) {
+  const wantedName = path.basename(String(relPath || '')).toLowerCase();
+  if (!wantedName) return [];
+
+  const suggestions = [];
+  const pending = [path.resolve(root)];
+  const ignored = new Set(['.git', 'node_modules', 'dist', 'build', 'release']);
+  let inspected = 0;
+
+  while (pending.length && suggestions.length < limit && inspected < 2000) {
+    const directory = pending.shift();
+    let entries;
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    } catch (_error) {
+      continue;
+    }
+
+    for (const entry of entries) {
+      inspected += 1;
+      if (entry.isDirectory()) {
+        if (!ignored.has(entry.name)) pending.push(path.join(directory, entry.name));
+      } else if (entry.name.toLowerCase() === wantedName) {
+        suggestions.push(path.relative(root, path.join(directory, entry.name)).replace(/\\/g, '/'));
+        if (suggestions.length >= limit) break;
+      }
+    }
+  }
+
+  return suggestions;
+}
+
 async function runAgentTool(name, args, root) {
   switch (name) {
     case 'read_file': {
       const target = resolveInsideRoot(root, args.path);
-      const content = await fs.readFile(target, 'utf8');
+      let content;
+      try {
+        content = await fs.readFile(target, 'utf8');
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        const suggestions = await findFileSuggestions(root, args.path);
+        const hint = suggestions.length
+          ? ` Kandidat path: ${suggestions.join(', ')}. Coba read_file lagi memakai kandidat yang sesuai.`
+          : ' Gunakan list_directory atau search_text untuk menemukan path yang benar, lalu coba read_file lagi.';
+        throw new Error(`File "${args.path}" tidak ditemukan.${hint}`);
+      }
       return content.length > TOOL_OUTPUT_LIMIT
         ? `${content.slice(0, TOOL_OUTPUT_LIMIT)}\n... [dipotong, ${content.length} karakter total]`
         : content;
@@ -172,4 +214,11 @@ async function runAgentTool(name, args, root) {
   }
 }
 
-module.exports = { AGENT_TOOLS, TOOL_OUTPUT_LIMIT, safeParseArgs, resolveInsideRoot, runAgentTool };
+module.exports = {
+  AGENT_TOOLS,
+  TOOL_OUTPUT_LIMIT,
+  safeParseArgs,
+  resolveInsideRoot,
+  findFileSuggestions,
+  runAgentTool
+};

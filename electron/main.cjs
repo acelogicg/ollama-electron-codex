@@ -605,7 +605,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
           if (missingReviews.length) {
             requirements.push(`baca ulang file yang berubah: ${missingReviews.join(', ')}`);
           }
-          if (!successfulValidation) {
+          if (changedFiles.size > 0 && !successfulValidation) {
             requirements.push('jalankan check/build/test yang relevan melalui run_command (minimal git diff --check, ditambah build/test bila tersedia)');
           }
           if (unresolvedFailures.size) {
@@ -651,10 +651,8 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
         const succeeded = isSuccessfulToolResult(result);
 
         const isMutation = call.name === 'write_file' || call.name === 'edit_file';
-        if (changedFiles.size > 0 || isMutation) {
-          if (succeeded) unresolvedFailures.delete(call.name);
-          else unresolvedFailures.set(call.name, result);
-        }
+        if (succeeded) unresolvedFailures.delete(call.name);
+        else unresolvedFailures.set(call.name, result);
 
         if (isMutation && succeeded) {
           const changedPath = normalizeToolPath(args.path);
@@ -692,7 +690,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
       if (verificationPending) {
         const details = [
           missingReviews.length ? `belum dibaca ulang: ${missingReviews.join(', ')}` : '',
-          !successfulValidation ? 'belum ada check/build/test yang berhasil' : '',
+          changedFiles.size > 0 && !successfulValidation ? 'belum ada check/build/test yang berhasil' : '',
           unresolvedFailures.size ? `masih gagal: ${[...unresolvedFailures.keys()].join(', ')}` : ''
         ].filter(Boolean).join('; ');
         event.sender.send('lmstudio:chat-chunk', {
