@@ -11,6 +11,15 @@ export default function Composer({
 }) {
   return (
     <footer className="composer-wrap">
+      {generating ? (
+        <div className="agent-progress" role="status" aria-live="polite">
+          <div className="agent-progress-track"><span /></div>
+          <div className="agent-progress-label">
+            <span className="agent-progress-pulse" />
+            Agent sedang memproses
+          </div>
+        </div>
+      ) : null}
       <div className="composer">
         <textarea
           value={input}

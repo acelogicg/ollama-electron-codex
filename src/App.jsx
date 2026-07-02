@@ -328,7 +328,11 @@ export default function App() {
       } else if (phase === 'result') {
         setMessages((current) => current.map((message) => (
           message.role === 'tool' && message.toolId === toolId
-            ? { ...message, result, status: 'done' }
+            ? {
+              ...message,
+              result,
+              status: /^(ERROR:|EXIT )/.test(String(result || '')) ? 'error' : 'done'
+            }
             : message
         )));
       }
