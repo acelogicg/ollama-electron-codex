@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Composer from './components/Composer.jsx';
 import MessageList from './components/MessageList.jsx';
+import MessageTips from './components/MessageTips.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import TerminalPanel from './components/TerminalPanel.jsx';
 import Topbar from './components/Topbar.jsx';
@@ -354,6 +355,18 @@ export default function App() {
           : (
             <>
               <MessageList messages={messages} bottomRef={bottomRef} />
+              {!generating
+                && messages.length > 0
+                && messages[messages.length - 1].role === 'assistant'
+                && !messages[messages.length - 1].streaming
+                ? (
+                  <MessageTips
+                    hasRepo={Boolean(workspaceRepo?.root || selectedRepo)}
+                    disabled={!activeModelReady}
+                    onSelect={setInput}
+                  />
+                )
+                : null}
               <Composer
                 input={input}
                 model={activeModelReady ? model : ''}
