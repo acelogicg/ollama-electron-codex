@@ -21,7 +21,9 @@ export default function Topbar({
   onReloadModels,
   onNewChat,
   onOpenSettings,
-  onBackToChat
+  onBackToChat,
+  terminalOpen,
+  onToggleTerminal
 }) {
   const showingSettings = view === 'settings';
 
@@ -92,6 +94,14 @@ export default function Topbar({
           aria-label={showingSettings ? 'Kembali ke chat' : 'Settings'}
         >
           <Icon name={showingSettings ? 'back' : 'settings'} />
+        </button>
+        <button
+          className={`icon-button ${terminalOpen ? 'active' : ''}`}
+          onClick={onToggleTerminal}
+          title={terminalOpen ? 'Sembunyikan terminal' : 'Tampilkan terminal'}
+          aria-label={terminalOpen ? 'Sembunyikan terminal' : 'Tampilkan terminal'}
+        >
+          <Icon name="terminal" />
         </button>
       </div>
     </header>

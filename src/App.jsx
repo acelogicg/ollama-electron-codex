@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Composer from './components/Composer.jsx';
 import MessageList from './components/MessageList.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
+import TerminalPanel from './components/TerminalPanel.jsx';
 import Topbar from './components/Topbar.jsx';
 import { buildChatHistory, buildSystemContext, chatModes } from './utils/chatContext.js';
 import WebGLBackground from './WebGLBackground.jsx';
@@ -28,6 +29,8 @@ export default function App() {
   const [generating, setGenerating] = useState(false);
   const [requestId, setRequestId] = useState(null);
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('lmstudio-base-url') || 'http://127.0.0.1:1234');
+  const [showTerminal, setShowTerminal] = useState(localStorage.getItem('show-terminal') === 'true');
+  const [terminalEntries, setTerminalEntries] = useState([]);
   const bottomRef = useRef(null);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
@@ -116,6 +119,10 @@ export default function App() {
   }, [baseUrl]);
 
   useEffect(() => {
+    localStorage.setItem('show-terminal', String(showTerminal));
+  }, [showTerminal]);
+
+  useEffect(() => {
     if (!model) return;
     localStorage.setItem('lmstudio-model', model);
     setStatus('Memuat model LM Studio...');
@@ -151,6 +158,15 @@ export default function App() {
 
     const offTool = window.lmstudio.onTool(({ requestId: id, phase, id: toolId, name, arguments: args, result }) => {
       if (id !== requestId) return;
+      if (name === 'run_command') {
+        if (phase === 'call') {
+          setTerminalEntries((current) => [...current, { id: toolId, command: args?.command || '', output: '', status: 'running' }]);
+        } else if (phase === 'result') {
+          setTerminalEntries((current) => current.map((entry) => (
+            entry.id === toolId ? { ...entry, output: result || '', status: 'done' } : entry
+          )));
+        }
+      }
       if (phase === 'call') {
         setMessages((current) => {
           const finalized = current
@@ -285,7 +301,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${showTerminal ? 'with-terminal' : ''}`}>
       <WebGLBackground />
       <main className="chat-panel">
         <Topbar
@@ -310,6 +326,8 @@ export default function App() {
           onNewChat={startNewChat}
           onOpenSettings={() => setView('settings')}
           onBackToChat={() => setView('chat')}
+          terminalOpen={showTerminal}
+          onToggleTerminal={() => setShowTerminal((open) => !open)}
         />
         {view === 'settings'
           ? (
@@ -343,6 +361,13 @@ export default function App() {
             </>
           )}
       </main>
+      {showTerminal && (
+        <TerminalPanel
+          entries={terminalEntries}
+          onClose={() => setShowTerminal(false)}
+          onClear={() => setTerminalEntries([])}
+        />
+      )}
     </div>
   );
 }

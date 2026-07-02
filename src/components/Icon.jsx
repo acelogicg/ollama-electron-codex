@@ -85,7 +85,22 @@ const paths = {
       <path d="M3.5 6.5v-2h5.25l1.75 2" />
     </>
   ),
-  circle: <circle cx="12" cy="12" r="5" />
+  circle: <circle cx="12" cy="12" r="5" />,
+  terminal: (
+    <>
+      <path d="M4 5.5h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z" />
+      <path d="m7 10 2.5 2L7 14" />
+      <path d="M12.5 14.5H16" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9 7V5h6v2" />
+      <path d="M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12" />
+      <path d="M10 11v6M14 11v6" />
+    </>
+  )
 };
 
 export default function Icon({ name }) {
