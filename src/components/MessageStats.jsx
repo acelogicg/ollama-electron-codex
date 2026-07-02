@@ -15,20 +15,20 @@ export default function MessageStats({ stats }) {
         <Icon name="circle" />
         {(tokensPerSecond || 0).toFixed(1)} tok/s
       </span>
-      <span className="stat out">
+      <span className="stat out" title="Token keluar (completion)">
         <Icon name="circle" />
-        {formatNumber(completionTokens)} token keluar
+        {formatNumber(completionTokens)}
       </span>
       {promptTokens ? (
-        <span className="stat in">
+        <span className="stat in" title="Token masuk (prompt)">
           <Icon name="circle" />
-          {formatNumber(promptTokens)} token masuk
+          {formatNumber(promptTokens)}
         </span>
       ) : null}
       {totalTokens ? (
-        <span className="stat total">
+        <span className="stat total" title="Total token">
           <Icon name="circle" />
-          {formatNumber(totalTokens)} total
+          {formatNumber(totalTokens)}
         </span>
       ) : null}
       <span className="stat time">
