@@ -22,8 +22,8 @@ export default function Composer({
         />
         {generating
           ? (
-            <button className="send stop" onClick={onStop} title="Hentikan" aria-label="Hentikan">
-              <Icon name="stop" />
+            <button type="button" className="send stop" onClick={onStop} title="Hentikan proses" aria-label="Hentikan proses">
+              <Icon name="cancel" />
             </button>
           )
           : (

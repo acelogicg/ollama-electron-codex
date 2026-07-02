@@ -27,6 +27,12 @@ const paths = {
     </>
   ),
   stop: <path d="M7 7h10v10H7z" />,
+  cancel: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="m9 9 6 6M15 9l-6 6" />
+    </>
+  ),
   settings: (
     <>
       <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
