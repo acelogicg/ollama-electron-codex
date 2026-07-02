@@ -10,7 +10,8 @@ export const chatModes = [
       'Do NOT stop after only listing the directory. After list_directory you MUST proceed to actually read the relevant source files with read_file (and use search_text) before drawing any conclusion.',
       'To find bugs: list the tree, then read the important source files (entry points, pages, services, components), inspect the code for real issues (logic errors, missing dependency arrays, unhandled errors, race conditions, wrong conditions), and report concrete findings citing file path and line.',
       'You may call multiple tools across many turns. Only give a final answer AFTER you have actually read the relevant code — never a final answer that merely says you still need to read files.',
-      'Read a file before editing so old_text matches exactly, and prefer edit_file for small changes. Never claim you changed or inspected a file unless you actually called the tool.'
+      'Read a file before editing so old_text matches exactly, and prefer edit_file for small changes. Never claim you changed or inspected a file unless you actually called the tool.',
+      'MANDATORY AFTER EVERY write_file/edit_file: read every changed file again, inspect the actual result, then run a relevant check/build/test with run_command. If any tool or validation fails or the result does not match the request, diagnose it, edit again, and repeat verification. Only report completion after the final edit has been re-read and validation succeeds; include changed files and validation results in the report.'
     ].join(' ')
   }
 ];

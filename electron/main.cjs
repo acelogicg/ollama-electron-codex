@@ -9,7 +9,7 @@ const LMSTUDIO_URL = process.env.LMSTUDIO_URL || 'http://127.0.0.1:1234';
 const activeRequests = new Map();
 const activeTerminalProcesses = new Map();
 const execFileAsync = promisify(execFile);
-const AGENT_MAX_STEPS = 16;
+const AGENT_MAX_STEPS = 24;
 const MAX_CONTEXT_FILES = 10;
 const MAX_FILE_CHARS = 4000;
 const MAX_TREE_FILES = 160;
@@ -448,6 +448,20 @@ function looksDeferring(text) {
   return /(ingin saya baca|apakah ada file|file tertentu|anda perlu|anda harus|yang perlu saya lakukan|which file|should i (read|open)|shall i|do you want me to|let me know|beri tahu saya)/i.test(trimmed);
 }
 
+function normalizeToolPath(filePath) {
+  const normalized = path.normalize(String(filePath || '')).replace(/\\/g, '/');
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isSuccessfulToolResult(result) {
+  const text = String(result || '');
+  return !text.startsWith('ERROR:') && !text.startsWith('EXIT ');
+}
+
+function isValidationCommand(command) {
+  return /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(run\s+)?(test|build|lint|check|typecheck)\b|(^|[;&|]\s*)(node|deno)\s+--check\b|(^|[;&|]\s*)(npx\s+)?(eslint|tsc|vite)\b|(^|[;&|]\s*)(pytest|python\s+-m\s+pytest|cargo\s+(test|check)|go\s+test|dotnet\s+(test|build))\b|git\s+diff\s+--check\b/i.test(String(command || ''));
+}
+
 ipcMain.handle('lmstudio:chat', async (event, payload) => {
   const { requestId, model, messages, options, baseUrl } = payload;
   if (!requestId || !model) throw new Error('requestId dan model wajib diisi.');
@@ -495,6 +509,10 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
   let totalTokens = 0;
   let genElapsed = 0;
   let completedSteps = 0;
+  const changedFiles = new Set();
+  const reviewedFiles = new Set();
+  const unresolvedFailures = new Map();
+  let successfulValidation = '';
 
   const accumulate = (usage, elapsedMs) => {
     completedSteps += 1;
@@ -537,6 +555,30 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
 
       if (!toolCalls.length) {
         const finalText = (content || '').trim();
+        const missingReviews = [...changedFiles].filter((file) => !reviewedFiles.has(file));
+        const verificationPending = unresolvedFailures.size > 0
+          || (changedFiles.size > 0 && (missingReviews.length > 0 || !successfulValidation));
+
+        if (verificationPending) {
+          const requirements = [];
+          if (missingReviews.length) {
+            requirements.push(`baca ulang file yang berubah: ${missingReviews.join(', ')}`);
+          }
+          if (!successfulValidation) {
+            requirements.push('jalankan check/build/test yang relevan melalui run_command (minimal git diff --check, ditambah build/test bila tersedia)');
+          }
+          if (unresolvedFailures.size) {
+            requirements.push(`perbaiki kegagalan tool: ${[...unresolvedFailures.entries()]
+              .map(([name, result]) => `${name}: ${String(result).slice(0, 300)}`)
+              .join(' | ')}`);
+          }
+          convo.push({
+            role: 'user',
+            content: `VALIDASI WAJIB BELUM SELESAI. Jangan memberi laporan final dulu. ${requirements.join('; ')}. Analisis hasilnya, perbaiki otomatis jika gagal/tidak sesuai, lalu ulangi validasi. Hanya laporkan selesai setelah semua pemeriksaan berhasil.`
+          });
+          continue;
+        }
+
         // Model berhenti tanpa memakai tool memadai dan malah minta izin/bertanya:
         // dorong agar lanjut bekerja otomatis, bukan langsung diterima sebagai jawaban.
         if (finalText && looksDeferring(finalText) && nudges < MAX_NUDGES) {
@@ -565,6 +607,32 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
         } catch (error) {
           result = `ERROR: ${error.message}`;
         }
+        const succeeded = isSuccessfulToolResult(result);
+
+        const isMutation = call.name === 'write_file' || call.name === 'edit_file';
+        if (changedFiles.size > 0 || isMutation) {
+          if (succeeded) unresolvedFailures.delete(call.name);
+          else unresolvedFailures.set(call.name, result);
+        }
+
+        if (isMutation && succeeded) {
+          const changedPath = normalizeToolPath(args.path);
+          if (changedPath) changedFiles.add(changedPath);
+          reviewedFiles.clear();
+          successfulValidation = '';
+          unresolvedFailures.delete(call.name);
+        } else if (call.name === 'read_file' && succeeded && changedFiles.size > 0) {
+          const reviewedPath = normalizeToolPath(args.path);
+          if (changedFiles.has(reviewedPath)) reviewedFiles.add(reviewedPath);
+        } else if (call.name === 'run_command' && changedFiles.size > 0 && isValidationCommand(args.command)) {
+          if (succeeded) {
+            successfulValidation = args.command;
+            unresolvedFailures.delete(call.name);
+          } else {
+            successfulValidation = '';
+            unresolvedFailures.set(call.name, result);
+          }
+        }
 
         event.sender.send('lmstudio:agent-tool', {
           requestId, phase: 'result', id: callId, name: call.name, result
@@ -574,22 +642,43 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
     }
 
     // Model kadang berhenti setelah memakai tool tanpa memberi jawaban teks, atau batas
-    // langkah tercapai. Paksa satu panggilan terakhir tanpa tool agar selalu ada ringkasan.
+    // langkah tercapai. Jangan mengklaim sukses bila perubahan belum lolos verifikasi.
     if (!sawFinalAnswer && !controller.signal.aborted) {
-      convo.push({
-        role: 'user',
-        content: 'Berikan jawaban/ringkasan akhir sekarang berdasarkan hasil tool di atas. Jangan panggil tool lagi.'
-      });
-      const { content, usage, elapsedMs } = await streamCompletion({
-        event, requestId, baseUrl, model, messages: convo, options, signal: controller.signal
-      });
-      accumulate(usage, elapsedMs);
+      const missingReviews = [...changedFiles].filter((file) => !reviewedFiles.has(file));
+      const verificationPending = unresolvedFailures.size > 0
+        || (changedFiles.size > 0 && (missingReviews.length > 0 || !successfulValidation));
 
-      if (!content || !content.trim()) {
+      if (verificationPending) {
+        const details = [
+          missingReviews.length ? `belum dibaca ulang: ${missingReviews.join(', ')}` : '',
+          !successfulValidation ? 'belum ada check/build/test yang berhasil' : '',
+          unresolvedFailures.size ? `masih gagal: ${[...unresolvedFailures.keys()].join(', ')}` : ''
+        ].filter(Boolean).join('; ');
         event.sender.send('lmstudio:chat-chunk', {
           requestId,
-          data: { message: { content: 'Agent selesai menjalankan tool tetapi model tidak memberi ringkasan. Coba tanyakan detail spesifik, atau naikkan Context Length model di LM Studio.', thinking: '' } }
+          data: {
+            message: {
+              content: `Agent berhenti sebelum validasi perubahan selesai (${details}). Perubahan belum dinyatakan berhasil. Jalankan kembali agent agar pemeriksaan dan perbaikan dapat dilanjutkan.`,
+              thinking: ''
+            }
+          }
         });
+      } else {
+        convo.push({
+          role: 'user',
+          content: `Berikan laporan akhir singkat berdasarkan hasil tool. Sebutkan file yang diubah dan pemeriksaan yang berhasil${successfulValidation ? ` (${successfulValidation})` : ''}. Jangan panggil tool lagi.`
+        });
+        const { content, usage, elapsedMs } = await streamCompletion({
+          event, requestId, baseUrl, model, messages: convo, options, signal: controller.signal
+        });
+        accumulate(usage, elapsedMs);
+
+        if (!content || !content.trim()) {
+          event.sender.send('lmstudio:chat-chunk', {
+            requestId,
+            data: { message: { content: 'Agent selesai menjalankan tool tetapi model tidak memberi laporan akhir.', thinking: '' } }
+          });
+        }
       }
     }
 
