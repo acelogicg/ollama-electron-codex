@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('lmstudio', {
   listModels: (baseUrl) => ipcRenderer.invoke('lmstudio:list-models', baseUrl),
   listTools: () => ipcRenderer.invoke('lmstudio:list-tools'),
+  suggestTips: (payload) => ipcRenderer.invoke('lmstudio:suggest-tips', payload),
   preloadModel: (model, baseUrl) => ipcRenderer.invoke('lmstudio:preload-model', { model, baseUrl }),
   chat: (payload) => ipcRenderer.invoke('lmstudio:chat', payload),
   agentRun: (payload) => ipcRenderer.invoke('lmstudio:agent', payload),

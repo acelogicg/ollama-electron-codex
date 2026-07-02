@@ -33,6 +33,8 @@ export default function App() {
   const [showTerminal, setShowTerminal] = useState(localStorage.getItem('show-terminal') === 'true');
   const [terminalEntries, setTerminalEntries] = useState([]);
   const [agentTools, setAgentTools] = useState([]);
+  const [tips, setTips] = useState([]);
+  const [tipsLoading, setTipsLoading] = useState(false);
   const bottomRef = useRef(null);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
@@ -96,6 +98,37 @@ export default function App() {
   useEffect(() => {
     window.lmstudio.listTools().then(setAgentTools).catch(() => setAgentTools([]));
   }, []);
+
+  // Setelah AI selesai menjawab, minta model membuat saran tindak lanjut otomatis.
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    const ready = !generating
+      && model
+      && last
+      && last.role === 'assistant'
+      && !last.streaming
+      && last.content?.trim();
+
+    if (!ready) {
+      setTips([]);
+      setTipsLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setTipsLoading(true);
+    const compact = messages
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content?.trim())
+      .slice(-4)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    window.lmstudio.suggestTips({ baseUrl, model, messages: compact })
+      .then((result) => { if (!cancelled) setTips(Array.isArray(result) ? result : []); })
+      .catch(() => { if (!cancelled) setTips([]); })
+      .finally(() => { if (!cancelled) setTipsLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [generating, messages, model, baseUrl]);
 
   useEffect(() => {
     localStorage.setItem('chat-mode', mode);
@@ -359,9 +392,11 @@ export default function App() {
                 && messages.length > 0
                 && messages[messages.length - 1].role === 'assistant'
                 && !messages[messages.length - 1].streaming
+                && (tipsLoading || tips.length)
                 ? (
                   <MessageTips
-                    hasRepo={Boolean(workspaceRepo?.root || selectedRepo)}
+                    tips={tips}
+                    loading={tipsLoading}
                     disabled={!activeModelReady}
                     onSelect={setInput}
                   />

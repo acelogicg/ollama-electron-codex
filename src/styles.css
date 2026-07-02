@@ -467,6 +467,7 @@ select {
   color: #e6e9ee;
 }
 .tip-chip:disabled { opacity: .45; cursor: default; }
+.tips-loading { color: #7f8a98; font-size: 11px; }
 
 .composer-wrap {
   padding: 8px 12px 10px;

@@ -1,34 +1,24 @@
-const BASE_TIPS = [
-  'Jelaskan perubahan',
-  'Jalankan test',
-  'Cari bug',
-  'Refactor kode'
-];
-
-const REPO_TIPS = [
-  'Cek git status',
-  'Buat pesan commit'
-];
-
-export default function MessageTips({ hasRepo, disabled, onSelect }) {
-  const tips = hasRepo ? [...BASE_TIPS.slice(0, 3), ...REPO_TIPS] : BASE_TIPS;
+export default function MessageTips({ tips, loading, disabled, onSelect }) {
+  if (!loading && (!tips || !tips.length)) return null;
 
   return (
     <div className="message-tips" aria-label="Saran lanjutan">
       <span className="tips-label">Tips</span>
       <div className="tips-chips">
-        {tips.map((tip) => (
-          <button
-            key={tip}
-            type="button"
-            className="tip-chip"
-            onClick={() => onSelect(tip)}
-            disabled={disabled}
-            title={tip}
-          >
-            {tip}
-          </button>
-        ))}
+        {loading && (!tips || !tips.length)
+          ? <span className="tips-loading">Menyiapkan saran…</span>
+          : tips.map((tip) => (
+            <button
+              key={tip}
+              type="button"
+              className="tip-chip"
+              onClick={() => onSelect(tip)}
+              disabled={disabled}
+              title={tip}
+            >
+              {tip}
+            </button>
+          ))}
       </div>
     </div>
   );

@@ -230,6 +230,51 @@ ipcMain.handle('lmstudio:list-tools', () => (
   AGENT_TOOLS.map((tool) => ({ name: tool.function.name, description: tool.function.description }))
 ));
 
+ipcMain.handle('lmstudio:suggest-tips', async (_event, { baseUrl, model, messages } = {}) => {
+  if (!model || !Array.isArray(messages) || !messages.length) return [];
+
+  const convo = messages
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
+    .slice(-4)
+    .map((m) => `${m.role === 'user' ? 'User' : 'Asisten'}: ${String(m.content).slice(0, 600)}`)
+    .join('\n');
+
+  const body = {
+    model,
+    stream: false,
+    temperature: 0.5,
+    // Longgar karena sebagian model bersifat "thinking" dan memakai token untuk reasoning
+    // sebelum menghasilkan JSON.
+    max_tokens: 512,
+    messages: [
+      {
+        role: 'system',
+        content: 'Kamu membuat saran tindak lanjut untuk chat agent coding. Berdasarkan percakapan, keluarkan 3 ide prompt lanjutan yang relevan dan bisa langsung dikirim user. Balas HANYA berupa JSON array of string (contoh: ["...","...","..."]), tanpa penjelasan lain. Tiap saran maksimal 6 kata, bahasa Indonesia, konkret, tetap dalam konteks coding/workspace.'
+      },
+      { role: 'user', content: `Percakapan:\n${convo}\n\nJSON array saran:` }
+    ]
+  };
+
+  try {
+    const response = await lmstudioFetch(baseUrl, '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    const start = text.indexOf('[');
+    const end = text.lastIndexOf(']');
+    if (start === -1 || end === -1 || end <= start) return [];
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 4)
+      : [];
+  } catch (_error) {
+    return [];
+  }
+});
+
 ipcMain.handle('github:list-repos', async (_event, cwd) => listGitHubRepos(cwd || process.cwd()));
 ipcMain.handle('github:get-workspace-repo', async (_event, cwd) => getWorkspaceRepo(cwd || process.cwd()));
 ipcMain.handle('workspace:get-context', async (_event, cwd) => getWorkspaceContext(cwd || process.cwd()));
