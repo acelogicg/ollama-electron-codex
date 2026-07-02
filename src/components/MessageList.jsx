@@ -34,11 +34,11 @@ function groupReadActivity(messages) {
   ));
 }
 
-export default function MessageList({ messages, bottomRef }) {
+export default function MessageList({ messages, bottomRef, containerRef, onScroll }) {
   const displayMessages = groupReadActivity(messages);
 
   return (
-    <section className="messages">
+    <section className="messages" ref={containerRef} onScroll={onScroll}>
       {displayMessages.map((message) => (
         message.role === 'read-group'
           ? (

@@ -40,6 +40,8 @@ export default function App() {
   const [tips, setTips] = useState([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const bottomRef = useRef(null);
+  const messagesRef = useRef(null);
+  const stickToBottomRef = useRef(true);
   const modelRefreshInFlight = useRef(false);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
@@ -397,7 +399,18 @@ export default function App() {
     return () => { offChunk(); offTool(); offDone(); offError(); };
   }, [requestId]);
 
-  useEffect(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
+  useEffect(() => {
+    if (!stickToBottomRef.current || !messagesRef.current) return undefined;
+    const frame = requestAnimationFrame(() => {
+      if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [messages, view]);
+
+  const handleMessageScroll = (event) => {
+    const element = event.currentTarget;
+    stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100;
+  };
 
   const send = async () => {
     const content = input.trim();
@@ -408,6 +421,7 @@ export default function App() {
     const chatHistory = buildChatHistory(messages, userMessage, { memoryEnabled, autoCompactContext });
     const history = [buildSystemContext(mode, selectedRepo, workspaceRepo, workspaceContext), ...chatHistory];
 
+    stickToBottomRef.current = true;
     setInput('');
     setGenerating(true);
     setStatus('Agent bekerja...');
@@ -552,21 +566,28 @@ export default function App() {
           )
           : (
             <>
-              <MessageList messages={messages} bottomRef={bottomRef} />
-              {!generating
-                && messages.length > 0
-                && messages[messages.length - 1].role === 'assistant'
-                && !messages[messages.length - 1].streaming
-                && (tipsLoading || tips.length)
-                ? (
-                  <MessageTips
-                    tips={tips}
-                    loading={tipsLoading}
-                    disabled={!activeModelReady}
-                    onSelect={setInput}
-                  />
-                )
-                : null}
+              <div className="chat-content">
+                <MessageList
+                  messages={messages}
+                  bottomRef={bottomRef}
+                  containerRef={messagesRef}
+                  onScroll={handleMessageScroll}
+                />
+                {!generating
+                  && messages.length > 0
+                  && messages[messages.length - 1].role === 'assistant'
+                  && !messages[messages.length - 1].streaming
+                  && (tipsLoading || tips.length)
+                  ? (
+                    <MessageTips
+                      tips={tips}
+                      loading={tipsLoading}
+                      disabled={!activeModelReady}
+                      onSelect={setInput}
+                    />
+                  )
+                  : null}
+              </div>
               <Composer
                 input={input}
                 model={activeModelReady ? model : ''}

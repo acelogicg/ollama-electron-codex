@@ -10,13 +10,19 @@ const STATUS_LABELS = {
 
 export default function TerminalPanel({ entries, cwd, onRun, onCancel, onClose, onClear }) {
   const bottomRef = useRef(null);
+  const bodyRef = useRef(null);
+  const stickToBottomRef = useRef(true);
   const inputRef = useRef(null);
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!stickToBottomRef.current || !bodyRef.current) return undefined;
+    const frame = requestAnimationFrame(() => {
+      if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
   }, [entries]);
 
   useEffect(() => {
@@ -46,6 +52,10 @@ export default function TerminalPanel({ entries, cwd, onRun, onCancel, onClose, 
 
   const hasCompletedEntries = entries.some((entry) => entry.status !== 'running');
   const cwdLabel = cwd || 'workspace';
+  const handleScroll = (event) => {
+    const element = event.currentTarget;
+    stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+  };
 
   return (
     <aside className="terminal-panel">
@@ -70,7 +80,7 @@ export default function TerminalPanel({ entries, cwd, onRun, onCancel, onClose, 
         </div>
       </div>
       <div className="terminal-cwd" title={cwdLabel}>{cwdLabel}</div>
-      <div className="terminal-body">
+      <div className="terminal-body" ref={bodyRef} onScroll={handleScroll}>
         {!entries.length && <p className="terminal-empty">Jalankan command di bawah atau tunggu command dari agent.</p>}
         {entries.map((entry) => (
           <div key={entry.id} className={`terminal-entry ${entry.status}`}>
