@@ -253,6 +253,17 @@ select {
 }
 .terminal-title .icon { width: 15px; height: 15px; }
 .terminal-actions { display: flex; gap: 2px; -webkit-app-region: no-drag; }
+.terminal-cwd {
+  flex: 0 0 auto;
+  overflow: hidden;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  color: #687484;
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .terminal-body {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -276,6 +287,18 @@ select {
 .terminal-cmd-text { flex: 1 1 auto; }
 .terminal-status { color: #7f8a98; }
 .terminal-entry.running .terminal-status { color: #e0b062; }
+.terminal-entry.error .terminal-status { color: #ef8e8e; }
+.terminal-entry.cancelled .terminal-status { color: #d5a66f; }
+.terminal-stop {
+  padding: 1px 5px;
+  border: 1px solid rgba(239, 142, 142, .3);
+  border-radius: 3px;
+  color: #ef8e8e;
+  background: transparent;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
 .terminal-output {
   margin: 5px 0 0;
   padding: 6px 8px;
@@ -284,6 +307,39 @@ select {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.terminal-output.has-stderr { border-left-color: rgba(239, 142, 142, .45); }
+.terminal-input-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(10, 14, 20, .98);
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+}
+.terminal-input-row input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 4px 0;
+  border: 0;
+  outline: 0;
+  color: #dce3ec;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+}
+.terminal-input-row input::placeholder { color: #566170; }
+.terminal-input-row button {
+  padding: 3px 7px;
+  border: 1px solid rgba(96, 185, 137, .28);
+  border-radius: 4px;
+  color: #78c99c;
+  background: rgba(96, 185, 137, .08);
+  font-size: 10px;
+  cursor: pointer;
+}
+.terminal-input-row button:disabled { opacity: .35; cursor: default; }
 
 .message-stats {
   display: flex;

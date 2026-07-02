@@ -45,3 +45,18 @@ contextBridge.exposeInMainWorld('git', {
   diff: (cwd) => ipcRenderer.invoke('git:diff', cwd),
   log: (cwd) => ipcRenderer.invoke('git:log', cwd)
 });
+
+contextBridge.exposeInMainWorld('terminal', {
+  run: (payload) => ipcRenderer.invoke('terminal:run', payload),
+  cancel: (id) => ipcRenderer.invoke('terminal:cancel', id),
+  onOutput: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('terminal:output', listener);
+    return () => ipcRenderer.removeListener('terminal:output', listener);
+  },
+  onDone: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('terminal:done', listener);
+    return () => ipcRenderer.removeListener('terminal:done', listener);
+  }
+});

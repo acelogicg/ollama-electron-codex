@@ -1,12 +1,51 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Icon from './Icon.jsx';
 
-export default function TerminalPanel({ entries, onClose, onClear }) {
+const STATUS_LABELS = {
+  running: '...',
+  done: 'OK',
+  error: 'ERR',
+  cancelled: 'STOP'
+};
+
+export default function TerminalPanel({ entries, cwd, onRun, onCancel, onClose, onClear }) {
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
+  const [command, setCommand] = useState('');
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const submit = (event) => {
+    event.preventDefault();
+    const value = command.trim();
+    if (!value) return;
+    onRun(value);
+    setHistory((current) => [...current.filter((item) => item !== value), value]);
+    setHistoryIndex(-1);
+    setCommand('');
+  };
+
+  const navigateHistory = (event) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    event.preventDefault();
+    if (!history.length) return;
+    const nextIndex = event.key === 'ArrowUp'
+      ? Math.min(historyIndex + 1, history.length - 1)
+      : Math.max(historyIndex - 1, -1);
+    setHistoryIndex(nextIndex);
+    setCommand(nextIndex < 0 ? '' : history[history.length - 1 - nextIndex]);
+  };
+
+  const hasCompletedEntries = entries.some((entry) => entry.status !== 'running');
+  const cwdLabel = cwd || 'workspace';
 
   return (
     <aside className="terminal-panel">
@@ -16,7 +55,13 @@ export default function TerminalPanel({ entries, onClose, onClear }) {
           Terminal
         </span>
         <div className="terminal-actions">
-          <button className="icon-button" onClick={onClear} title="Bersihkan terminal" aria-label="Bersihkan terminal" disabled={!entries.length}>
+          <button
+            className="icon-button"
+            onClick={onClear}
+            title="Bersihkan output selesai"
+            aria-label="Bersihkan output selesai"
+            disabled={!hasCompletedEntries}
+          >
             <Icon name="trash" />
           </button>
           <button className="icon-button" onClick={onClose} title="Tutup terminal" aria-label="Tutup terminal">
@@ -24,20 +69,48 @@ export default function TerminalPanel({ entries, onClose, onClear }) {
           </button>
         </div>
       </div>
+      <div className="terminal-cwd" title={cwdLabel}>{cwdLabel}</div>
       <div className="terminal-body">
-        {!entries.length && <p className="terminal-empty">Perintah yang dijalankan agent akan muncul di sini.</p>}
+        {!entries.length && <p className="terminal-empty">Jalankan command di bawah atau tunggu command dari agent.</p>}
         {entries.map((entry) => (
           <div key={entry.id} className={`terminal-entry ${entry.status}`}>
             <div className="terminal-command">
-              <span className="terminal-prompt">$</span>
+              <span className="terminal-prompt">&gt;</span>
               <span className="terminal-cmd-text">{entry.command}</span>
-              <span className="terminal-status">{entry.status === 'running' ? '…' : '✓'}</span>
+              {entry.status === 'running' ? (
+                <button
+                  type="button"
+                  className="terminal-stop"
+                  onClick={() => onCancel(entry.id)}
+                  title="Hentikan command"
+                >
+                  STOP
+                </button>
+              ) : (
+                <span className="terminal-status">{STATUS_LABELS[entry.status] || entry.status}</span>
+              )}
             </div>
-            {entry.output ? <pre className="terminal-output">{entry.output}</pre> : null}
+            {entry.output ? (
+              <pre className={`terminal-output ${entry.hasStderr ? 'has-stderr' : ''}`}>{entry.output}</pre>
+            ) : null}
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
+      <form className="terminal-input-row" onSubmit={submit}>
+        <span className="terminal-prompt">&gt;</span>
+        <input
+          ref={inputRef}
+          value={command}
+          onChange={(event) => setCommand(event.target.value)}
+          onKeyDown={navigateHistory}
+          placeholder="Ketik command lalu Enter"
+          aria-label="Command terminal"
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <button type="submit" disabled={!command.trim()} title="Jalankan command">Run</button>
+      </form>
     </aside>
   );
 }

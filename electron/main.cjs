@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
 const { promisify } = require('util');
@@ -7,6 +7,7 @@ const { AGENT_TOOLS, TOOL_OUTPUT_LIMIT, safeParseArgs, runAgentTool } = require(
 
 const LMSTUDIO_URL = process.env.LMSTUDIO_URL || 'http://127.0.0.1:1234';
 const activeRequests = new Map();
+const activeTerminalProcesses = new Map();
 const execFileAsync = promisify(execFile);
 const AGENT_MAX_STEPS = 16;
 const MAX_CONTEXT_FILES = 10;
@@ -619,6 +620,49 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
 ipcMain.handle('lmstudio:cancel', async (_event, requestId) => {
   const controller = activeRequests.get(requestId);
   if (controller) controller.abort();
+  return { ok: true };
+});
+
+ipcMain.handle('terminal:run', async (event, { id, command, cwd } = {}) => {
+  if (!id || !command?.trim()) throw new Error('id dan command wajib diisi.');
+  if (activeTerminalProcesses.has(id)) throw new Error('Command dengan id tersebut masih berjalan.');
+
+  const workingDirectory = path.resolve(cwd || process.cwd());
+  const info = await fs.stat(workingDirectory);
+  if (!info.isDirectory()) throw new Error('Working directory terminal tidak valid.');
+
+  const child = spawn(command, {
+    cwd: workingDirectory,
+    shell: true,
+    windowsHide: true,
+    env: process.env
+  });
+  activeTerminalProcesses.set(id, child);
+
+  const send = (channel, payload) => {
+    if (!event.sender.isDestroyed()) event.sender.send(channel, payload);
+  };
+  child.stdout.on('data', (chunk) => {
+    send('terminal:output', { id, stream: 'stdout', data: chunk.toString() });
+  });
+  child.stderr.on('data', (chunk) => {
+    send('terminal:output', { id, stream: 'stderr', data: chunk.toString() });
+  });
+  child.on('error', (error) => {
+    send('terminal:output', { id, stream: 'stderr', data: `${error.message}\n` });
+  });
+  child.on('close', (code, signal) => {
+    activeTerminalProcesses.delete(id);
+    send('terminal:done', { id, code, signal });
+  });
+
+  return { ok: true, pid: child.pid };
+});
+
+ipcMain.handle('terminal:cancel', async (_event, id) => {
+  const child = activeTerminalProcesses.get(id);
+  if (!child) return { ok: false };
+  child.kill();
   return { ok: true };
 });
 

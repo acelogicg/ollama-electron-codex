@@ -99,6 +99,32 @@ export default function App() {
     window.lmstudio.listTools().then(setAgentTools).catch(() => setAgentTools([]));
   }, []);
 
+  useEffect(() => {
+    const offOutput = window.terminal.onOutput(({ id, data, stream }) => {
+      setTerminalEntries((current) => current.map((entry) => (
+        entry.id === id
+          ? {
+            ...entry,
+            output: `${entry.output || ''}${data || ''}`,
+            hasStderr: entry.hasStderr || stream === 'stderr'
+          }
+          : entry
+      )));
+    });
+    const offDone = window.terminal.onDone(({ id, code, signal }) => {
+      setTerminalEntries((current) => current.map((entry) => (
+        entry.id === id
+          ? {
+            ...entry,
+            status: signal ? 'cancelled' : (code === 0 ? 'done' : 'error'),
+            exitCode: code
+          }
+          : entry
+      )));
+    });
+    return () => { offOutput(); offDone(); };
+  }, []);
+
   // Setelah AI selesai menjawab, minta model membuat saran tindak lanjut otomatis.
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -201,7 +227,13 @@ export default function App() {
           setTerminalEntries((current) => [...current, { id: toolId, command: args?.command || '', output: '', status: 'running' }]);
         } else if (phase === 'result') {
           setTerminalEntries((current) => current.map((entry) => (
-            entry.id === toolId ? { ...entry, output: result || '', status: 'done' } : entry
+            entry.id === toolId
+              ? {
+                ...entry,
+                output: result || '',
+                status: String(result || '').startsWith('EXIT ') ? 'error' : 'done'
+              }
+              : entry
           )));
         }
       }
@@ -354,6 +386,28 @@ export default function App() {
     await loadModels();
   };
 
+  const runTerminalCommand = async (command) => {
+    const id = crypto.randomUUID();
+    const cwd = workspaceRepo?.root || workspaceDir || '';
+    setTerminalEntries((current) => [
+      ...current,
+      { id, command, cwd, output: '', status: 'running', source: 'user' }
+    ]);
+    try {
+      await window.terminal.run({ id, command, cwd });
+    } catch (error) {
+      setTerminalEntries((current) => current.map((entry) => (
+        entry.id === id
+          ? { ...entry, output: `${error.message}\n`, status: 'error' }
+          : entry
+      )));
+    }
+  };
+
+  const cancelTerminalCommand = async (id) => {
+    await window.terminal.cancel(id);
+  };
+
   return (
     <div className={`app-shell ${showTerminal ? 'with-terminal' : ''}`}>
       <WebGLBackground />
@@ -433,8 +487,13 @@ export default function App() {
       {showTerminal && (
         <TerminalPanel
           entries={terminalEntries}
+          cwd={workspaceRepo?.root || workspaceDir || ''}
+          onRun={runTerminalCommand}
+          onCancel={cancelTerminalCommand}
           onClose={() => setShowTerminal(false)}
-          onClear={() => setTerminalEntries([])}
+          onClear={() => setTerminalEntries((current) => (
+            current.filter((entry) => entry.status === 'running')
+          ))}
         />
       )}
     </div>
