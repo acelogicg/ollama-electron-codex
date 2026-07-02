@@ -116,7 +116,13 @@ button { color: inherit; }
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.toolbar { gap: 6px; -webkit-app-region: no-drag; }
+.toolbar {
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
 .mode-switcher, .repo-picker {
   gap: 4px;
   padding: 0 4px;
@@ -157,6 +163,66 @@ select {
   border: 0;
   background: transparent;
   padding-left: 4px;
+}
+
+.model-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.model-control > select {
+  width: clamp(130px, 18vw, 210px);
+  flex: 1 1 150px;
+}
+.model-badges {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 7px;
+  background: rgba(12, 15, 21, .58);
+  white-space: nowrap;
+}
+.model-badge {
+  flex: 0 0 21px;
+  width: 21px;
+  height: 21px;
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 5px;
+  color: #929dac;
+  background: rgba(255, 255, 255, .035);
+}
+.model-badge .icon {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+.model-badge.tools {
+  color: #78c99c;
+  border-color: rgba(96, 185, 137, .22);
+  background: rgba(96, 185, 137, .08);
+}
+.model-badge.thinking {
+  color: #b3a2ec;
+  border-color: rgba(164, 139, 229, .22);
+  background: rgba(164, 139, 229, .08);
+}
+.model-badge.vision {
+  color: #7fc9e9;
+  border-color: rgba(101, 184, 221, .22);
+  background: rgba(101, 184, 221, .08);
+}
+.model-badge.embedding {
+  color: #deb477;
+  border-color: rgba(222, 180, 119, .22);
+  background: rgba(222, 180, 119, .08);
 }
 
 .icon-button {
@@ -989,6 +1055,10 @@ textarea::placeholder { color: #6d7480; }
 @media (max-width: 620px) {
   select { width: 145px; }
   .repo-picker { display: none; }
+  .model-control { flex: 1 1 auto; }
+  .model-control > select { width: 100px; }
+  .model-badges { gap: 2px; }
+  .model-badge { flex-basis: 19px; width: 19px; height: 19px; }
   .bubble { max-width: 94%; }
   .composer-wrap { padding: 7px 8px 8px; }
 }

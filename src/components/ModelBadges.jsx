@@ -13,7 +13,11 @@ export default function ModelBadges({ capabilities, className = '' }) {
   if (!active.length) return null;
 
   return (
-    <span className={`model-badges ${className}`}>
+    <span
+      className={`model-badges ${className}`}
+      role="group"
+      aria-label={`Kapabilitas model: ${active.map((badge) => badge.label).join(', ')}`}
+    >
       {active.map((badge) => (
         <span key={badge.key} className={`model-badge ${badge.key}`} title={badge.label} aria-label={badge.label}>
           <Icon name={badge.icon} />

@@ -90,25 +90,29 @@ export default function Topbar({
           </button>
         </div>}
 
-        {!showingSettings && <select value={model} onChange={(event) => onModelChange(event.target.value)} disabled={loadingModels || generating} title={selected?.label || selected?.name || 'Pilih model'}>
-          {!model && (
-            <option value="">
-              {models.length ? 'Tidak ada model Agent yang kompatibel' : 'Tidak ada model'}
-            </option>
-          )}
-          {models.map((item) => (
-            <option
-              key={item.name}
-              value={item.name}
-              disabled={!item.capabilities?.tools || item.capabilities?.embedding}
-            >
-              {item.loaded && item.capabilities?.tools ? '● ' : '○ '}
-              {item.label || item.name}
-              {!item.capabilities?.tools || item.capabilities?.embedding ? ' — tanpa agent tools' : ''}
-            </option>
-          ))}
-        </select>}
-        {!showingSettings && <ModelBadges capabilities={selected?.capabilities} />}
+        {!showingSettings && (
+          <div className="model-control">
+            <select value={model} onChange={(event) => onModelChange(event.target.value)} disabled={loadingModels || generating} title={selected?.label || selected?.name || 'Pilih model'}>
+              {!model && (
+                <option value="">
+                  {models.length ? 'Tidak ada model Agent yang kompatibel' : 'Tidak ada model'}
+                </option>
+              )}
+              {models.map((item) => (
+                <option
+                  key={item.name}
+                  value={item.name}
+                  disabled={!item.capabilities?.tools || item.capabilities?.embedding}
+                >
+                  {item.loaded && item.capabilities?.tools ? '● ' : '○ '}
+                  {item.label || item.name}
+                  {!item.capabilities?.tools || item.capabilities?.embedding ? ' — tanpa agent tools' : ''}
+                </option>
+              ))}
+            </select>
+            <ModelBadges capabilities={selected?.capabilities} />
+          </div>
+        )}
         {!showingSettings && <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">
           <Icon name="refresh" />
         </button>}
