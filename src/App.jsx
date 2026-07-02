@@ -50,7 +50,7 @@ export default function App() {
   ), [githubRepos, githubRepoName]);
 
   const agentReadiness = useMemo(() => {
-    const requiredTools = ['read_file', 'write_file', 'edit_file', 'run_command'];
+    const requiredTools = ['read_file', 'write_file', 'edit_file', 'inspect_project', 'run_command'];
     const availableTools = new Set(agentTools.map((tool) => tool.name));
     const missingTools = requiredTools.filter((name) => !availableTools.has(name));
     const hasWorkspace = Boolean(workspaceRepo?.root || workspaceDir);

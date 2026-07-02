@@ -6,6 +6,19 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
 const TOOL_OUTPUT_LIMIT = 12000;
+const PROJECT_MANIFESTS = new Set([
+  'package.json',
+  'pyproject.toml',
+  'requirements.txt',
+  'Pipfile',
+  'poetry.lock',
+  'Cargo.toml',
+  'go.mod',
+  'composer.json',
+  'pom.xml',
+  'build.gradle',
+  'build.gradle.kts'
+]);
 
 const AGENT_TOOLS = [
   {
@@ -78,8 +91,20 @@ const AGENT_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'inspect_project',
+      description: 'Deteksi manifest, dependency manager, environment, dan command validasi project sebelum menjalankan command.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_command',
-      description: 'Jalankan perintah shell di root workspace dan kembalikan stdout/stderr. Timeout 60 detik.',
+      description: 'Jalankan perintah shell di root workspace dan kembalikan stdout/stderr. Wajib panggil inspect_project lebih dulu. Timeout 60 detik.',
       parameters: {
         type: 'object',
         properties: { command: { type: 'string' } },
@@ -138,6 +163,109 @@ async function findFileSuggestions(root, relPath, limit = 6) {
   }
 
   return suggestions;
+}
+
+async function inspectProject(root) {
+  const resolvedRoot = path.resolve(root);
+  const found = [];
+  const pending = [{ directory: resolvedRoot, depth: 0 }];
+  const ignored = new Set(['.git', 'node_modules', 'dist', 'build', 'release', '.next', 'vendor', 'target']);
+  let inspected = 0;
+
+  while (pending.length && inspected < 1000) {
+    const { directory, depth } = pending.shift();
+    let entries;
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    } catch (_error) {
+      continue;
+    }
+
+    for (const entry of entries) {
+      inspected += 1;
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < 2 && !ignored.has(entry.name) && !entry.name.startsWith('.')) {
+          pending.push({ directory: fullPath, depth: depth + 1 });
+        }
+        continue;
+      }
+
+      if (
+        PROJECT_MANIFESTS.has(entry.name)
+        || /\.sln$/i.test(entry.name)
+        || /\.csproj$/i.test(entry.name)
+      ) {
+        found.push(fullPath);
+      }
+    }
+  }
+
+  const projects = [];
+  for (const manifestPath of found.slice(0, 30)) {
+    const relativePath = path.relative(resolvedRoot, manifestPath).replace(/\\/g, '/');
+    const directory = path.dirname(manifestPath);
+    const name = path.basename(manifestPath);
+
+    if (name === 'package.json') {
+      let pkg = {};
+      try {
+        pkg = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+      } catch (_error) {
+        // Tetap laporkan manifest meski JSON rusak.
+      }
+      const siblingNames = new Set(await fs.readdir(directory).catch(() => []));
+      const manager = siblingNames.has('pnpm-lock.yaml')
+        ? 'pnpm'
+        : (siblingNames.has('yarn.lock')
+          ? 'yarn'
+          : (siblingNames.has('bun.lockb') || siblingNames.has('bun.lock') ? 'bun' : 'npm'));
+      projects.push({
+        ecosystem: 'node',
+        manifest: relativePath,
+        working_directory: path.relative(resolvedRoot, directory).replace(/\\/g, '/') || '.',
+        package_manager: pkg.packageManager || manager,
+        dependencies_installed: siblingNames.has('node_modules'),
+        scripts: Object.keys(pkg.scripts || {})
+      });
+      continue;
+    }
+
+    if (['pyproject.toml', 'requirements.txt', 'Pipfile', 'poetry.lock'].includes(name)) {
+      const siblingNames = new Set(await fs.readdir(directory).catch(() => []));
+      projects.push({
+        ecosystem: 'python',
+        manifest: relativePath,
+        working_directory: path.relative(resolvedRoot, directory).replace(/\\/g, '/') || '.',
+        manager: name === 'Pipfile' ? 'pipenv' : (name === 'poetry.lock' ? 'poetry' : (name === 'pyproject.toml' ? 'pyproject' : 'pip')),
+        virtual_environment: siblingNames.has('.venv') ? '.venv' : (siblingNames.has('venv') ? 'venv' : null)
+      });
+      continue;
+    }
+
+    const ecosystem = name === 'Cargo.toml'
+      ? 'rust'
+      : (name === 'go.mod'
+        ? 'go'
+        : (name === 'composer.json'
+          ? 'php'
+          : (/^(pom\.xml|build\.gradle(?:\.kts)?)$/.test(name)
+            ? 'java'
+            : (/\.(sln|csproj)$/i.test(name) ? 'dotnet' : 'unknown'))));
+    projects.push({
+      ecosystem,
+      manifest: relativePath,
+      working_directory: path.relative(resolvedRoot, directory).replace(/\\/g, '/') || '.'
+    });
+  }
+
+  return JSON.stringify({
+    workspace: resolvedRoot,
+    projects,
+    guidance: projects.length
+      ? 'Gunakan working_directory, package manager, virtual environment, dan scripts yang terdeteksi. Jangan install/update dependency tanpa diminta.'
+      : 'Tidak ada manifest project yang terdeteksi hingga kedalaman 2. Gunakan command generik yang aman dan jangan mengasumsikan dependency tersedia.'
+  }, null, 2);
 }
 
 async function runAgentTool(name, args, root) {
@@ -237,6 +365,8 @@ async function runAgentTool(name, args, root) {
         throw error;
       }
     }
+    case 'inspect_project':
+      return inspectProject(root);
     case 'run_command': {
       if (!args.command) throw new Error('command wajib diisi.');
       try {
@@ -264,5 +394,6 @@ module.exports = {
   safeParseArgs,
   resolveInsideRoot,
   findFileSuggestions,
+  inspectProject,
   runAgentTool
 };

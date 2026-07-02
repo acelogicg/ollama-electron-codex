@@ -508,7 +508,7 @@ function isSuccessfulToolResult(result) {
 }
 
 function isValidationCommand(command) {
-  return /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(run\s+)?(test|build|lint|check|typecheck)\b|(^|[;&|]\s*)(node|deno)\s+--check\b|(^|[;&|]\s*)(npx\s+)?(eslint|tsc|vite)\b|(^|[;&|]\s*)(pytest|python\s+-m\s+pytest|cargo\s+(test|check)|go\s+test|dotnet\s+(test|build))\b|git\s+diff\s+--check\b/i.test(String(command || ''));
+  return /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(run\s+)?(test|build|lint|check|typecheck)\b|(^|[;&|]\s*)(node|deno)\s+--check\b|(^|[;&|]\s*)(npx\s+)?(eslint|tsc|vite)\b|(^|[;&|]\s*)(pytest|python\s+-m\s+(pytest|compileall)|ruff\s+check|mypy|cargo\s+(test|check)|go\s+test|dotnet\s+(test|build)|composer\s+(test|validate)|phpunit|mvn\s+test|gradle\s+test)\b|git\s+diff\s+--check\b/i.test(String(command || ''));
 }
 
 ipcMain.handle('lmstudio:chat', async (event, payload) => {
@@ -561,6 +561,7 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
   let completedSteps = 0;
   let workspaceToolCalls = 0;
   let inspectedWorkspace = false;
+  let projectEnvironmentInspected = false;
   const changedFiles = new Set();
   const reviewedFiles = new Set();
   const unresolvedFailures = new Map();
@@ -673,6 +674,8 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
         let result;
         if (argumentError) {
           result = `ERROR: ${argumentError.message}`;
+        } else if (call.name === 'run_command' && !projectEnvironmentInspected) {
+          result = 'ERROR: PREFLIGHT_REQUIRED: panggil inspect_project terlebih dahulu, baca manifest/dependency manager yang terdeteksi, lalu pilih command dan working directory yang sesuai.';
         } else {
           try {
             result = await runAgentTool(call.name, args, root);
@@ -683,6 +686,9 @@ ipcMain.handle('lmstudio:agent', async (event, payload) => {
         const succeeded = isSuccessfulToolResult(result);
         if (succeeded && (call.name === 'read_file' || call.name === 'search_text')) {
           inspectedWorkspace = true;
+        }
+        if (succeeded && call.name === 'inspect_project') {
+          projectEnvironmentInspected = true;
         }
 
         const isMutation = call.name === 'write_file' || call.name === 'edit_file';

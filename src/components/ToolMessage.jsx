@@ -6,6 +6,7 @@ const TOOL_LABELS = {
   edit_file: 'Edit file',
   list_directory: 'Daftar direktori',
   search_text: 'Cari teks',
+  inspect_project: 'Periksa environment',
   run_command: 'Jalankan perintah'
 };
 
