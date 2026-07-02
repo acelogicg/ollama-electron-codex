@@ -91,9 +91,14 @@ export default function App() {
     try {
       const list = await window.lmstudio.listModels(baseUrl);
       setModels(list);
-      const preferred = list.some((item) => item.name === model) ? model : list[0]?.name || '';
+      const agentModels = list.filter((item) => item.capabilities?.tools && !item.capabilities?.embedding);
+      const preferred = agentModels.some((item) => item.name === model)
+        ? model
+        : (agentModels.find((item) => item.loaded)?.name || agentModels[0]?.name || '');
       setModel(preferred);
-      setStatus(list.length ? 'Siap' : 'Model LM Studio tidak ditemukan');
+      setStatus(agentModels.length
+        ? 'Model agent ditemukan'
+        : (list.length ? 'Tidak ada model yang mendukung tool calling' : 'Model LM Studio tidak ditemukan'));
     } catch (error) {
       setModelLoadState('error');
       setModelLoadError(error.message);
@@ -233,7 +238,13 @@ export default function App() {
   }, [showTerminal]);
 
   useEffect(() => {
-    if (!model) return;
+    if (!model || !selected) return;
+    if (!selected.capabilities?.tools || selected.capabilities?.embedding) {
+      setModelLoadState('error');
+      setModelLoadError('Model tidak mendukung tool calling dan tidak dapat dipakai dalam mode Agent.');
+      setStatus('Model tidak mendukung Agent');
+      return;
+    }
     let cancelled = false;
     localStorage.setItem('lmstudio-model', model);
     setModelLoadState('loading');
@@ -255,7 +266,7 @@ export default function App() {
         setStatus(`Gagal: ${error.message}`);
       });
     return () => { cancelled = true; };
-  }, [model, baseUrl]);
+  }, [model, baseUrl, selected?.name, selected?.capabilities?.tools, selected?.capabilities?.embedding]);
 
   useEffect(() => {
     const offChunk = window.lmstudio.onChunk(({ requestId: id, data }) => {

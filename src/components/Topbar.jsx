@@ -91,11 +91,20 @@ export default function Topbar({
         </div>}
 
         {!showingSettings && <select value={model} onChange={(event) => onModelChange(event.target.value)} disabled={loadingModels || generating} title={selected?.label || selected?.name || 'Pilih model'}>
-          {!models.length && <option value="">Tidak ada model</option>}
+          {!model && (
+            <option value="">
+              {models.length ? 'Tidak ada model Agent yang kompatibel' : 'Tidak ada model'}
+            </option>
+          )}
           {models.map((item) => (
-            <option key={item.name} value={item.name}>
+            <option
+              key={item.name}
+              value={item.name}
+              disabled={!item.capabilities?.tools || item.capabilities?.embedding}
+            >
               {item.loaded && item.capabilities?.tools ? '● ' : '○ '}
               {item.label || item.name}
+              {!item.capabilities?.tools || item.capabilities?.embedding ? ' — tanpa agent tools' : ''}
             </option>
           ))}
         </select>}

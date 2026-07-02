@@ -287,7 +287,12 @@ ipcMain.handle('lmstudio:list-models', async (_event, baseUrl) => {
       arch: '',
       loaded: false,
       loadedInstances: [],
-      capabilities: inferCapabilities(item.id)
+      capabilities: {
+        ...inferCapabilities(item.id),
+        // Endpoint OpenAI lama tidak memberi metadata tool-use. Jangan menyatakan
+        // agent siap berdasarkan tebakan nama model.
+        tools: false
+      }
     }));
   }
 });

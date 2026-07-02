@@ -69,7 +69,7 @@ export default function SettingsPage({
               {loadingModels
                 ? 'Memuat daftar model dari LM Studio...'
                 : (models.length
-                  ? `${models.length} model terdeteksi. Pilih model yang ingin dipakai.`
+                  ? `${models.length} model terdeteksi. Model tanpa tool calling dinonaktifkan untuk mode Agent.`
                   : `Belum ada model dari ${baseUrl}. Muat model di LM Studio lalu tekan Refresh.`)}
             </p>
           </div>
@@ -81,11 +81,20 @@ export default function SettingsPage({
               disabled={loadingModels || !models.length}
               title="Pilih model"
             >
-              {!models.length && <option value="">Tidak ada model</option>}
+              {!model && (
+                <option value="">
+                  {models.length ? 'Tidak ada model Agent yang kompatibel' : 'Tidak ada model'}
+                </option>
+              )}
               {models.map((item) => (
-                <option key={item.name} value={item.name}>
+                <option
+                  key={item.name}
+                  value={item.name}
+                  disabled={!item.capabilities?.tools || item.capabilities?.embedding}
+                >
                   {item.loaded && item.capabilities?.tools ? '● ' : '○ '}
                   {item.label || item.name}
+                  {!item.capabilities?.tools || item.capabilities?.embedding ? ' — tanpa agent tools' : ''}
                 </option>
               ))}
             </select>
