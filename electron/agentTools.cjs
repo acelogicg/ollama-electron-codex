@@ -5,7 +5,7 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
-const TOOL_OUTPUT_LIMIT = 20000;
+const TOOL_OUTPUT_LIMIT = 12000;
 
 const AGENT_TOOLS = [
   {

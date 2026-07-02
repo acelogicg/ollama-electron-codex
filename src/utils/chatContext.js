@@ -43,28 +43,23 @@ export function buildChatHistory(messages, userMessage, { memoryEnabled, autoCom
   ];
 }
 
+const MAX_TREE_IN_PROMPT = 80;
+
+// Konteks agent sengaja dibuat ramping: model bisa membaca isi file & diff sendiri
+// lewat tool (read_file, search_text, run_command). Menjejalkan seluruh isi file dan
+// diff ke system prompt membuat konteks membengkak dan model kecil bisa stall/terpotong.
 function appendWorkspaceContext(lines, workspaceContext) {
   if (!workspaceContext) return;
 
   if (workspaceContext.files?.length) {
-    lines.push(`Workspace file tree (${workspaceContext.files.length}${workspaceContext.omittedFileCount ? ` + ${workspaceContext.omittedFileCount} omitted` : ''}):`);
-    lines.push(workspaceContext.files.join('\n'));
-  }
-
-  if (workspaceContext.snippets?.length) {
-    lines.push('Relevant code snippets:');
-    for (const snippet of workspaceContext.snippets) {
-      lines.push(`--- ${snippet.path}${snippet.truncated ? ' (truncated)' : ''} ---`);
-      lines.push(snippet.content);
-    }
+    const shown = workspaceContext.files.slice(0, MAX_TREE_IN_PROMPT);
+    const omitted = workspaceContext.files.length - shown.length + (workspaceContext.omittedFileCount || 0);
+    lines.push(`Workspace file tree (${workspaceContext.files.length}${omitted ? ` + ${omitted} omitted` : ''}) — gunakan read_file untuk membaca isinya:`);
+    lines.push(shown.join('\n'));
   }
 
   if (workspaceContext.git?.diffStat) {
-    lines.push(`Git diff stat:\n${workspaceContext.git.diffStat}`);
-  }
-
-  if (workspaceContext.git?.diff) {
-    lines.push(`Git diff${workspaceContext.git.diffTruncated ? ' (truncated)' : ''}:\n${workspaceContext.git.diff}`);
+    lines.push(`Git diff stat (pakai run_command "git diff" untuk detail):\n${workspaceContext.git.diffStat}`);
   }
 
   if (workspaceContext.git?.branches) {
