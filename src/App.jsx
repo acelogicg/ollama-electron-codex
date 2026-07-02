@@ -27,12 +27,15 @@ export default function App() {
   const [workspaceContext, setWorkspaceContext] = useState(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [modelLoadState, setModelLoadState] = useState('idle');
+  const [modelLoadError, setModelLoadError] = useState('');
   const [generating, setGenerating] = useState(false);
   const [requestId, setRequestId] = useState(null);
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('lmstudio-base-url') || 'http://127.0.0.1:1234');
   const [showTerminal, setShowTerminal] = useState(localStorage.getItem('show-terminal') === 'true');
   const [terminalEntries, setTerminalEntries] = useState([]);
   const [agentTools, setAgentTools] = useState([]);
+  const [toolsChecked, setToolsChecked] = useState(false);
   const [tips, setTips] = useState([]);
   const [tipsLoading, setTipsLoading] = useState(false);
   const bottomRef = useRef(null);
@@ -42,7 +45,45 @@ export default function App() {
     githubRepos.find((repo) => repo.nameWithOwner === githubRepoName) || null
   ), [githubRepos, githubRepoName]);
 
-  const activeModelReady = Boolean(model);
+  const agentReadiness = useMemo(() => {
+    const requiredTools = ['read_file', 'write_file', 'edit_file', 'run_command'];
+    const availableTools = new Set(agentTools.map((tool) => tool.name));
+    const missingTools = requiredTools.filter((name) => !availableTools.has(name));
+    const hasWorkspace = Boolean(workspaceRepo?.root || workspaceDir);
+    const reasons = [];
+
+    if (!model) reasons.push('Model belum dipilih');
+    else if (modelLoadState === 'loading' || modelLoadState === 'idle') reasons.push('Model sedang diperiksa');
+    else if (modelLoadState === 'error') reasons.push(modelLoadError || 'Model gagal dimuat');
+    if (selected && !selected.capabilities?.tools) reasons.push('Model tidak mendukung tool calling');
+    if (!toolsChecked) reasons.push('Tool lokal sedang diperiksa');
+    else if (missingTools.length) reasons.push(`Tool lokal belum tersedia: ${missingTools.join(', ')}`);
+    if (!hasWorkspace) reasons.push('Workspace belum dipilih');
+
+    return {
+      ready: Boolean(model)
+        && modelLoadState === 'ready'
+        && Boolean(selected?.capabilities?.tools)
+        && toolsChecked
+        && missingTools.length === 0
+        && hasWorkspace,
+      checking: loadingModels || loadingRepos || !toolsChecked || modelLoadState === 'loading',
+      reasons
+    };
+  }, [
+    agentTools,
+    loadingModels,
+    loadingRepos,
+    model,
+    modelLoadError,
+    modelLoadState,
+    selected,
+    toolsChecked,
+    workspaceDir,
+    workspaceRepo
+  ]);
+
+  const activeModelReady = agentReadiness.ready;
 
   const loadModels = async () => {
     setLoadingModels(true);
@@ -54,6 +95,8 @@ export default function App() {
       setModel(preferred);
       setStatus(list.length ? 'Siap' : 'Model LM Studio tidak ditemukan');
     } catch (error) {
+      setModelLoadState('error');
+      setModelLoadError(error.message);
       setStatus(`LM Studio offline: ${error.message}`);
     } finally {
       setLoadingModels(false);
@@ -96,7 +139,10 @@ export default function App() {
   useEffect(() => { loadModels(); }, []);
   useEffect(() => { loadGitHubRepos(); }, []);
   useEffect(() => {
-    window.lmstudio.listTools().then(setAgentTools).catch(() => setAgentTools([]));
+    window.lmstudio.listTools()
+      .then(setAgentTools)
+      .catch(() => setAgentTools([]))
+      .finally(() => setToolsChecked(true));
   }, []);
 
   useEffect(() => {
@@ -188,11 +234,27 @@ export default function App() {
 
   useEffect(() => {
     if (!model) return;
+    let cancelled = false;
     localStorage.setItem('lmstudio-model', model);
+    setModelLoadState('loading');
+    setModelLoadError('');
     setStatus('Memuat model LM Studio...');
     window.lmstudio.preloadModel(model, baseUrl)
-      .then(() => setStatus('Siap'))
-      .catch((error) => setStatus(`Gagal: ${error.message}`));
+      .then(() => {
+        if (cancelled) return;
+        setModelLoadState('ready');
+        setModels((current) => current.map((item) => (
+          item.name === model ? { ...item, loaded: true } : item
+        )));
+        setStatus('Siap');
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setModelLoadState('error');
+        setModelLoadError(error.message);
+        setStatus(`Gagal: ${error.message}`);
+      });
+    return () => { cancelled = true; };
   }, [model, baseUrl]);
 
   useEffect(() => {
@@ -417,6 +479,7 @@ export default function App() {
           models={models}
           selected={selected}
           status={status}
+          agentReadiness={agentReadiness}
           view={view}
           mode={mode}
           modes={chatModes}

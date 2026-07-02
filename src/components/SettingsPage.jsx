@@ -83,7 +83,10 @@ export default function SettingsPage({
             >
               {!models.length && <option value="">Tidak ada model</option>}
               {models.map((item) => (
-                <option key={item.name} value={item.name}>{item.label || item.name}</option>
+                <option key={item.name} value={item.name}>
+                  {item.loaded && item.capabilities?.tools ? '● ' : '○ '}
+                  {item.label || item.name}
+                </option>
               ))}
             </select>
             <button

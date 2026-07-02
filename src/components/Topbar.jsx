@@ -6,6 +6,7 @@ export default function Topbar({
   models,
   selected,
   status,
+  agentReadiness,
   view,
   mode,
   modes,
@@ -27,6 +28,9 @@ export default function Topbar({
   onToggleTerminal
 }) {
   const showingSettings = view === 'settings';
+  const readinessLabel = agentReadiness.ready
+    ? 'Agent siap dari workstation ini'
+    : (agentReadiness.reasons.join('. ') || 'Agent belum siap');
 
   return (
     <header className="topbar">
@@ -36,6 +40,14 @@ export default function Topbar({
         </span>
         <span className={`status-dot ${model ? 'online' : ''}`} title={status} />
         <span className="engine-label">LM Studio</span>
+        <span
+          className={`agent-readiness ${agentReadiness.ready ? 'ready' : (agentReadiness.checking ? 'checking' : 'not-ready')}`}
+          title={readinessLabel}
+          aria-label={readinessLabel}
+        >
+          <Icon name="agent" />
+          <span className="agent-readiness-dot" />
+        </span>
       </div>
 
       <div className="toolbar">
@@ -80,7 +92,12 @@ export default function Topbar({
 
         {!showingSettings && <select value={model} onChange={(event) => onModelChange(event.target.value)} disabled={loadingModels || generating} title={selected?.label || selected?.name || 'Pilih model'}>
           {!models.length && <option value="">Tidak ada model</option>}
-          {models.map((item) => <option key={item.name} value={item.name}>{item.label || item.name}</option>)}
+          {models.map((item) => (
+            <option key={item.name} value={item.name}>
+              {item.loaded && item.capabilities?.tools ? '● ' : '○ '}
+              {item.label || item.name}
+            </option>
+          ))}
         </select>}
         {!showingSettings && <ModelBadges capabilities={selected?.capabilities} />}
         {!showingSettings && <button className="icon-button" onClick={onReloadModels} title="Muat ulang model" aria-label="Muat ulang model">

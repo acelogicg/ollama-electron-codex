@@ -223,7 +223,7 @@ async function listGitHubRepos(cwd = process.cwd()) {
 
 function inferCapabilities(id, type) {
   const name = String(id || '').toLowerCase();
-  const embedding = type === 'embeddings' || /embed/.test(name);
+  const embedding = type === 'embedding' || type === 'embeddings' || /embed/.test(name);
   const vision = type === 'vlm' || /(^|[-_/])(vl|vlm|vision|llava|multimodal)([-_/]|$)/.test(name);
   const thinking = /think|reason|(^|[-_/])r1([-_/]|$)|deepseek-r1|qwq|magistral|(^|[-_/])o[13]([-_/]|$)/.test(name);
   const tools = !embedding;
@@ -231,18 +231,52 @@ function inferCapabilities(id, type) {
 }
 
 ipcMain.handle('lmstudio:list-models', async (_event, baseUrl) => {
-  // API native LM Studio (/api/v0) memberi metadata lebih kaya (type, arch) untuk
-  // mendeteksi kapabilitas. Kalau tidak tersedia, fallback ke /v1/models.
+  // Native v1 adalah sumber utama karena membedakan model tersedia vs instance yang
+  // benar-benar loaded serta memberi metadata tool-use resmi.
+  try {
+    const response = await lmstudioFetch(baseUrl, '/api/v1/models');
+    const data = await response.json();
+    return (data.models || []).map((item) => {
+      const inferred = inferCapabilities(item.key, item.type);
+      return {
+        name: item.key,
+        label: item.display_name || item.key,
+        type: item.type || 'llm',
+        arch: item.architecture || '',
+        loaded: Array.isArray(item.loaded_instances) && item.loaded_instances.length > 0,
+        loadedInstances: (item.loaded_instances || []).map((instance) => instance.id),
+        capabilities: {
+          tools: Boolean(item.capabilities?.trained_for_tool_use),
+          thinking: Boolean(item.capabilities?.reasoning) || inferred.thinking,
+          vision: Boolean(item.capabilities?.vision),
+          embedding: item.type === 'embedding'
+        }
+      };
+    });
+  } catch (_v1Error) {
+    // LM Studio lama: v0 masih memberi state loaded dan daftar capability.
+  }
+
   try {
     const response = await lmstudioFetch(baseUrl, '/api/v0/models');
     const data = await response.json();
-    return (data.data || []).map((item) => ({
-      name: item.id,
-      label: item.id,
-      type: item.type || 'llm',
-      arch: item.arch || '',
-      capabilities: inferCapabilities(item.id, item.type)
-    }));
+    return (data.data || []).map((item) => {
+      const inferred = inferCapabilities(item.id, item.type);
+      const declared = Array.isArray(item.capabilities) ? item.capabilities : [];
+      return {
+        name: item.id,
+        label: item.id,
+        type: item.type || 'llm',
+        arch: item.arch || '',
+        loaded: item.state === 'loaded',
+        loadedInstances: item.state === 'loaded' ? [item.id] : [],
+        capabilities: {
+          ...inferred,
+          tools: declared.includes('tool_use'),
+          vision: item.type === 'vlm' || inferred.vision
+        }
+      };
+    });
   } catch (_error) {
     const response = await lmstudioFetch(baseUrl, '/v1/models');
     const data = await response.json();
@@ -251,6 +285,8 @@ ipcMain.handle('lmstudio:list-models', async (_event, baseUrl) => {
       label: item.id,
       type: 'llm',
       arch: '',
+      loaded: false,
+      loadedInstances: [],
       capabilities: inferCapabilities(item.id)
     }));
   }
