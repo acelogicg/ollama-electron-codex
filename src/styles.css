@@ -535,6 +535,35 @@ textarea::placeholder { color: #6d7480; }
   cursor: default;
 }
 
+.tool-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-left: 2px solid rgba(120, 170, 255, .5);
+  border-radius: 6px;
+  background: rgba(12, 15, 21, .55);
+}
+.tool-item-name {
+  color: #9fc0f0;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.tool-item-desc {
+  color: #89929f;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .toggle {
   position: relative;
   flex: 0 0 auto;

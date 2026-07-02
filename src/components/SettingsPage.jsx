@@ -6,6 +6,7 @@ export default function SettingsPage({
   baseUrl,
   models,
   model,
+  tools,
   loadingModels,
   onBaseUrlChange,
   onApplyBaseUrl,
@@ -93,6 +94,23 @@ export default function SettingsPage({
               {loadingModels ? 'Memuat...' : 'Refresh'}
             </button>
           </div>
+        </div>
+
+        <div className="settings-row settings-row-stack">
+          <div>
+            <h2>Tool agent {tools.length ? `(${tools.length})` : ''}</h2>
+            <p>Kemampuan yang bisa dipakai model dalam mode Agent. Semua dibatasi pada direktori workspace yang dipilih.</p>
+          </div>
+          <ul className="tool-list">
+            {tools.length
+              ? tools.map((tool) => (
+                <li key={tool.name} className="tool-item">
+                  <code className="tool-item-name">{tool.name}</code>
+                  <span className="tool-item-desc">{tool.description}</span>
+                </li>
+              ))
+              : <li className="tool-item"><span className="tool-item-desc">Tidak ada tool terdeteksi.</span></li>}
+          </ul>
         </div>
 
         <div className="settings-row">

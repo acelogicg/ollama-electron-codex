@@ -226,6 +226,10 @@ ipcMain.handle('lmstudio:list-models', async (_event, baseUrl) => {
   return (data.data || []).map((item) => ({ name: item.id, label: item.id }));
 });
 
+ipcMain.handle('lmstudio:list-tools', () => (
+  AGENT_TOOLS.map((tool) => ({ name: tool.function.name, description: tool.function.description }))
+));
+
 ipcMain.handle('github:list-repos', async (_event, cwd) => listGitHubRepos(cwd || process.cwd()));
 ipcMain.handle('github:get-workspace-repo', async (_event, cwd) => getWorkspaceRepo(cwd || process.cwd()));
 ipcMain.handle('workspace:get-context', async (_event, cwd) => getWorkspaceContext(cwd || process.cwd()));

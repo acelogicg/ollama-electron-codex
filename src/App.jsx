@@ -31,6 +31,7 @@ export default function App() {
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('lmstudio-base-url') || 'http://127.0.0.1:1234');
   const [showTerminal, setShowTerminal] = useState(localStorage.getItem('show-terminal') === 'true');
   const [terminalEntries, setTerminalEntries] = useState([]);
+  const [agentTools, setAgentTools] = useState([]);
   const bottomRef = useRef(null);
 
   const selected = useMemo(() => models.find((item) => item.name === model), [models, model]);
@@ -91,6 +92,9 @@ export default function App() {
 
   useEffect(() => { loadModels(); }, []);
   useEffect(() => { loadGitHubRepos(); }, []);
+  useEffect(() => {
+    window.lmstudio.listTools().then(setAgentTools).catch(() => setAgentTools([]));
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('chat-mode', mode);
@@ -337,6 +341,7 @@ export default function App() {
               baseUrl={baseUrl}
               models={models}
               model={model}
+              tools={agentTools}
               loadingModels={loadingModels}
               onBaseUrlChange={handleBaseUrlChange}
               onApplyBaseUrl={applyBaseUrl}
