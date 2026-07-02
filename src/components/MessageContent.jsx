@@ -4,7 +4,7 @@ function TypingDots() {
   return <span className="typing"><b /><b /><b /></span>;
 }
 
-function ContentBlocks({ content, role }) {
+export function ContentBlocks({ content, role }) {
   return splitMessageBlocks(content).map((block, index) => {
     if (block.type === 'code') {
       return (
